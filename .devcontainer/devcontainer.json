@@ -9,7 +9,6 @@
       "redhat.vscode-yaml",
       "esbenp.prettier-vscode"
     ],
-    // Please keep this file in sync with settings in home-assistant/.vscode/settings.default.json
     "settings": {
 		"terminal.integrated.shell.linux": "/bin/bash",
 		"python.pythonPath": "/usr/local/bin/python",
