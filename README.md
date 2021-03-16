@@ -32,7 +32,7 @@ from aiomodernforms.const import LIGHT_POWER_ON
 
 async def main():
     """Example on controlling your Modern Forms Fan device."""
-    async with aiomodernforms.ModernFormsDevice("192.168.3.197") as fan:
+    async with aiomodernforms.ModernFormsDevice("fan.local") as fan:
         await fan.update()
         print(fan.status)
         await fan.light(
