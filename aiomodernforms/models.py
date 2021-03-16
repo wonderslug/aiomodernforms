@@ -26,7 +26,8 @@ class Info:
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> Info:
-        return Info(id=data.get(STATE_CLIENT_ID))
+        """Return Info object from Modern Forms API response."""
+        return Info(id=data.get(STATE_CLIENT_ID, "UNKNOWN"))
 
 
 @dataclass

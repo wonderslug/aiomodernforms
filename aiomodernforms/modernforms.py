@@ -174,14 +174,15 @@ class ModernFormsDevice:
             await self.update()
         data = await self._request(commands=commands)
         self._device.update_from_dict(data=data)  # type: ignore
-        return self._device.state
+        return self._device.state  # type: ignore
 
     @property
     def status(self):
         """Fan get status."""
         if self._device is None:
             raise ModernFormsNotInitializedError(
-                "The device has not been initialized.  Please run update on the device before getting state"
+                "The device has not been initialized.  "
+                + "Please run update on the device before getting state"
             )
         return self._device.state
 
@@ -275,16 +276,19 @@ class ModernFormsDevice:
                 FAN_DIRECTION_REVERSE,
             ]:
                 raise ModernFormsInvalidSettingsError(
-                    f"fan direction must be {FAN_DIRECTION_FORWARD} or {FAN_DIRECTION_REVERSE}"
+                    f"fan direction must be {FAN_DIRECTION_FORWARD}"
+                    + f" or {FAN_DIRECTION_REVERSE}"
                 )
             commands[COMMAND_FAN_DIRECTION] = direction
 
         await self.request(commands=commands)
 
     async def away(self, away=bool):
+        """Change the away state of the device."""
         await self.request(commands={COMMAND_AWAY_MODE: away})
 
     async def adaptive_learning(self, adaptive_learning=bool):
+        """Change the adaptive learning state of the device."""
         await self.request(commands={COMMAND_ADAPTIVE_LEARNING: adaptive_learning})
 
     async def close(self) -> None:
