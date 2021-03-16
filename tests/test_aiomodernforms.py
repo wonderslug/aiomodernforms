@@ -298,6 +298,7 @@ async def test_invalid_setting(aresponses):
 async def test_connection_error(aresponses):
     """Test to make validate proper connection error handling."""
 
+    print(aresponses)
     with pytest.raises(aiomodernforms.ModernFormsConnectionError):
         async with aiomodernforms.ModernFormsDevice("fan.local") as device:
             await device.update()
