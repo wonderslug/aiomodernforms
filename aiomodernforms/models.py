@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from typing import Any, Dict
 
 from .const import (
+    INFO_CLIENT_ID,
     STATE_ADAPTIVE_LEARNING,
     STATE_AWAY_MODE,
-    STATE_CLIENT_ID,
     STATE_FAN_DIRECTION,
     STATE_FAN_POWER,
     STATE_FAN_SLEEP_TIMER,
@@ -15,6 +15,18 @@ from .const import (
     STATE_LIGHT_BRIGHTNESS,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
+    INFO_FIRMWARE_VERSION,
+    INFO_DEVICE_NAME,
+    INFO_FAN_MOTOR_TYPE,
+    INFO_FAN_TYPE,
+    INFO_FEDERATED_IDENTITY,
+    INFO_FIRMWARE_URL,
+    INFO_LIGHT_TYPE,
+    INFO_MAC,
+    INFO_MAIN_MCU_FIRMWARE_VERSION,
+    INFO_OWNER,
+    INFO_PRODUCT_SKU,
+    INFO_PRODUCTION_LOT_NUMBER,
 )
 
 
@@ -22,12 +34,38 @@ from .const import (
 class Info:
     """Info about the Modern Forms device."""
 
-    id: str
+    client_id: str
+    mac: str
+    light_type: str
+    fan_type: str
+    fan_motor_type: str
+    production_lot_number: str
+    product_sku: str
+    owner: str
+    federated_identity: str
+    device_name: str
+    firmware_version: str
+    main_mcu_firmware_version: str
+    firmware_url: str
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> Info:
         """Return Info object from Modern Forms API response."""
-        return Info(id=data.get(STATE_CLIENT_ID, "UNKNOWN"))
+        return Info(
+            client_id=data.get(INFO_CLIENT_ID, ""),
+            mac=data.get(INFO_MAC, ""),
+            light_type=data.get(INFO_LIGHT_TYPE, ""),
+            fan_type=data.get(INFO_FAN_TYPE, ""),
+            fan_motor_type=data.get(INFO_FAN_MOTOR_TYPE, ""),
+            production_lot_number=data.get(INFO_PRODUCTION_LOT_NUMBER, ""),
+            product_sku=data.get(INFO_PRODUCT_SKU, ""),
+            owner=data.get(INFO_OWNER, ""),
+            federated_identity=data.get(INFO_FEDERATED_IDENTITY, ""),
+            device_name=data.get(INFO_DEVICE_NAME, ""),
+            firmware_version=data.get(INFO_FIRMWARE_VERSION, ""),
+            main_mcu_firmware_version=data.get(INFO_MAIN_MCU_FIRMWARE_VERSION, ""),
+            firmware_url=data.get(INFO_FIRMWARE_URL, ""),
+        )
 
 
 @dataclass
@@ -66,12 +104,16 @@ class Device:
     info: Info
     state: State
 
-    def __init__(self, data: dict):
+    def __init__(self, state_data: dict, info_data: dict):
         """Initialize an empty Modern Forms device class."""
-        self.update_from_dict(data)
+        self.update_from_dict(state_data=state_data, info_data=info_data)
 
-    def update_from_dict(self, data: dict) -> "Device":
+    def update_from_dict(
+        self, state_data: dict = None, info_data: dict = None
+    ) -> "Device":
         """Update the device status with the passed dict."""
-        self.state = State.from_dict(data)
-        self.info = Info.from_dict(data)
+        if state_data is not None:
+            self.state = State.from_dict(state_data)
+        if info_data is not None:
+            self.info = Info.from_dict(info_data)
         return self

@@ -41,10 +41,27 @@ basic_response = {
     "schedule": "",
 }
 
+basic_info = {
+    "clientId": "MF_000000000000",
+    "mac": "CC:CC:CC:CC:CC:CC",
+    "lightType": "F6IN-120V-R1-30",
+    "fanType": "1818-56",
+    "fanMotorType": "DC125X25",
+    "productionLotNumber": "",
+    "productSku": "",
+    "owner": "someone@somewhere.com",
+    "federatedIdentity": "us-east-1:f3da237b-c19c-4f61-b387-0e6dde2e470b",
+    "deviceName": "Fan",
+    "firmwareVersion": "01.03.0025",
+    "mainMcuFirmwareVersion": "01.03.3008",
+    "firmwareUrl": "",
+}
+
 
 @pytest.mark.asyncio
 async def test_basic_status(aresponses):
     """Test JSON response is handled correctly."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     aresponses.add(
         "fan.local",
         "/mf",
@@ -63,7 +80,7 @@ async def test_basic_status(aresponses):
 @pytest.mark.asyncio
 async def test_command(aresponses):
     """Test to make sure setting lights works."""
-
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
     async def evaluate_request(request):
@@ -90,7 +107,7 @@ async def test_command(aresponses):
 @pytest.mark.asyncio
 async def test_light(aresponses):
     """Test to make sure setting lights works."""
-
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
     async def evaluate_request(request):
@@ -132,7 +149,7 @@ async def test_light(aresponses):
 @pytest.mark.asyncio
 async def test_fan(aresponses):
     """Test to make sure setting fan works."""
-
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
     async def evaluate_request(request):
@@ -176,7 +193,7 @@ async def test_fan(aresponses):
 @pytest.mark.asyncio
 async def test_away(aresponses):
     """Test to make sure setting away mode works."""
-
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
     async def evaluate_request(request):
@@ -201,7 +218,7 @@ async def test_away(aresponses):
 @pytest.mark.asyncio
 async def test_adaptive_learning(aresponses):
     """Test to make sure setting adaptive learning mode works."""
-
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
     async def evaluate_request(request):
@@ -228,7 +245,7 @@ async def test_adaptive_learning(aresponses):
 @pytest.mark.asyncio
 async def test_invalid_setting(aresponses):
     """Test to make sure setting invalid settings are rejected."""
-
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
@@ -297,8 +314,7 @@ async def test_invalid_setting(aresponses):
 @pytest.mark.asyncio
 async def test_connection_error(aresponses):
     """Test to make validate proper connection error handling."""
-
-    print(aresponses)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     with pytest.raises(aiomodernforms.ModernFormsConnectionError):
         async with aiomodernforms.ModernFormsDevice("fan.local") as device:
             await device.update()
@@ -307,7 +323,7 @@ async def test_connection_error(aresponses):
 @pytest.mark.asyncio
 async def test_server_error(aresponses):
     """Test to make validate proper server error handling."""
-
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     aresponses.add(
         "fan.local",
         "/mf",

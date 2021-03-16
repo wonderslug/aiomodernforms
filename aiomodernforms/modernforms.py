@@ -23,6 +23,7 @@ from .const import (
     COMMAND_LIGHT_BRIGHTNESS,
     COMMAND_LIGHT_POWER,
     COMMAND_LIGHT_SLEEP_TIMER,
+    COMMAND_QUERY_STATIC_DATA,
     COMMAND_QUERY_STATUS,
     DEFAULT_API_ENDPOINT,
     DEFAULT_PORT,
@@ -90,15 +91,16 @@ class ModernFormsDevice:
     )
     async def update(self, full_update: bool = False) -> Device:
         """Get all information about the device in a single call."""
-        data = await self._request()
-        if not data:
+        info_data = await self._request({COMMAND_QUERY_STATIC_DATA: True})
+        state_data = await self._request()
+        if not state_data:
             raise ModernFormsEmptyResponseError(
                 f"Modern Forms device at {self._host}"
                 + " returned an empty API response on full update"
             )
         if self._device is None or full_update:
-            self._device = Device(data)
-        self._device.update_from_dict(data)
+            self._device = Device(state_data=state_data, info_data=info_data)
+        self._device.update_from_dict(state_data=state_data)
         return self._device
 
     @backoff.on_exception(
@@ -173,7 +175,7 @@ class ModernFormsDevice:
         if self._device is None:
             await self.update()
         data = await self._request(commands=commands)
-        self._device.update_from_dict(data=data)  # type: ignore
+        self._device.update_from_dict(state_data=data)  # type: ignore
         return self._device.state  # type: ignore
 
     @property
