@@ -1,9 +1,7 @@
 """Tests for Async IO Modern Forms Library"""
-import asyncio
 import json
 from datetime import datetime, timedelta
 
-import aiohttp
 import pytest
 
 import aiomodernforms
@@ -64,7 +62,7 @@ async def test_basic_status(aresponses):
 
 @pytest.mark.asyncio
 async def test_command(aresponses):
-    """Test to make sure setting lights works"""
+    """Test to make sure setting lights works."""
 
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
@@ -91,7 +89,7 @@ async def test_command(aresponses):
 
 @pytest.mark.asyncio
 async def test_light(aresponses):
-    """Test to make sure setting lights works"""
+    """Test to make sure setting lights works."""
 
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
@@ -133,7 +131,7 @@ async def test_light(aresponses):
 
 @pytest.mark.asyncio
 async def test_fan(aresponses):
-    """Test to make sure setting fan works"""
+    """Test to make sure setting fan works."""
 
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
@@ -177,7 +175,7 @@ async def test_fan(aresponses):
 
 @pytest.mark.asyncio
 async def test_away(aresponses):
-    """Test to make sure setting away mode works"""
+    """Test to make sure setting away mode works."""
 
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
@@ -202,7 +200,7 @@ async def test_away(aresponses):
 
 @pytest.mark.asyncio
 async def test_adaptive_learning(aresponses):
-    """Test to make sure setting adaptive learning mode works"""
+    """Test to make sure setting adaptive learning mode works."""
 
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
@@ -229,7 +227,7 @@ async def test_adaptive_learning(aresponses):
 
 @pytest.mark.asyncio
 async def test_invalid_setting(aresponses):
-    """Test to make sure setting invalid settings are rejected"""
+    """Test to make sure setting invalid settings are rejected."""
 
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
 
@@ -298,7 +296,7 @@ async def test_invalid_setting(aresponses):
 
 @pytest.mark.asyncio
 async def test_connection_error(aresponses):
-    """Test to make validate proper connection error handling"""
+    """Test to make validate proper connection error handling."""
 
     with pytest.raises(aiomodernforms.ModernFormsConnectionError):
         async with aiomodernforms.ModernFormsDevice("fan.local") as device:
@@ -307,7 +305,7 @@ async def test_connection_error(aresponses):
 
 @pytest.mark.asyncio
 async def test_server_error(aresponses):
-    """Test to make validate proper server error handling"""
+    """Test to make validate proper server error handling."""
 
     aresponses.add(
         "fan.local",
