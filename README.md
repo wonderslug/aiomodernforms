@@ -1,8 +1,9 @@
 # Python: Async IO Modern Forms API Client
 
-[![Continuous Integration](https://github.com/wonderslug/aiomodernforms/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/wonderslug/aiomodernforms/actions/workflows/ci.yml)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/wonderslug/aiomodernforms/Continuous%20Integration)
 ![Codecov](https://img.shields.io/codecov/c/github/wonderslug/aiomodernforms)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![PyPI](https://img.shields.io/pypi/v/aiomodernforms)
 
 Asynchronous Python client for Modern Forms Fans.
 
