@@ -22,7 +22,6 @@ pip install aiomodernforms
 
 ```python
 """Asynchronous Python client for Async IO Modern Forms fan."""
-
 import asyncio
 from datetime import datetime, timedelta
 
@@ -31,8 +30,8 @@ from aiomodernforms.const import LIGHT_POWER_ON
 
 
 async def main():
-    """Example on controlling your Modern Forms Fan device."""
-    async with aiomodernforms.ModernFormsDevice("fan.local") as fan:
+    """Turn on the fan light."""
+    async with aiomodernforms.ModernFormsDevice("192.168.3.197") as fan:
         await fan.update()
         print(fan.status)
         await fan.light(
@@ -46,5 +45,4 @@ async def main():
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
-
 ```
