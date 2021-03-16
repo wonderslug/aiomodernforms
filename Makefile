@@ -41,11 +41,11 @@ lint-black: ## Run linting using black & blacken-docs.
 
 .PHONY: lint-flake8
 lint-flake8: ## Run linting using flake8 (pycodestyle/pydocstyle).
-	flake8 aiomodernforms
+	flake8 aiomodernforms examples tests
 
 .PHONY: lint-pylint
 lint-pylint: ## Run linting using PyLint.
-	pylint aiomodernforms
+	pylint aiomodernforms examples tests
 
 .PHONY: lint-mypy
 lint-mypy: ## Run linting using MyPy.
