@@ -1,4 +1,4 @@
-# Python: WLED API Client
+# Python: Async IO Modern Forms API Client
 
 [![GitHub Release][releases-shield]][releases]
 ![Project Stage][project-stage-shield]
