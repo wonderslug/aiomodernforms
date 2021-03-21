@@ -35,7 +35,7 @@ class Info:
     """Info about the Modern Forms device."""
 
     client_id: str
-    mac: str
+    mac_address: str
     light_type: str
     fan_type: str
     fan_motor_type: str
@@ -53,7 +53,7 @@ class Info:
         """Return Info object from Modern Forms API response."""
         return Info(
             client_id=data.get(INFO_CLIENT_ID, ""),
-            mac=data.get(INFO_MAC, ""),
+            mac_address=data.get(INFO_MAC, ""),
             light_type=data.get(INFO_LIGHT_TYPE, ""),
             fan_type=data.get(INFO_FAN_TYPE, ""),
             fan_motor_type=data.get(INFO_FAN_MOTOR_TYPE, ""),
