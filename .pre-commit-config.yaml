@@ -63,3 +63,4 @@ repos:
     hooks:
       - id: pyupgrade
         args: [--py36-plus]
+exclude: '^.github/.*'
