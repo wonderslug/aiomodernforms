@@ -34,4 +34,4 @@ version-resolver:
 
 exclude-labels:
   - 'skip-changelog'
-  
+
