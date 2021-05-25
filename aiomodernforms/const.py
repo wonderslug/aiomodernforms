@@ -60,3 +60,5 @@ INFO_DEVICE_NAME = "deviceName"
 INFO_FIRMWARE_VERSION = "firmwareVersion"
 INFO_MAIN_MCU_FIRMWARE_VERSION = "mainMcuFirmwareVersion"
 INFO_FIRMWARE_URL = "firmwareUrl"
+
+SLEEP_TIMER_CANCEL = 0

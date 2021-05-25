@@ -147,6 +147,93 @@ async def test_light(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_light_sleep_datetime(aresponses):
+    """Test to make sure setting light sleep works."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_LIGHT_SLEEP_TIMER] = data[
+            aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER
+        ]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        sleep_time = datetime.now() + timedelta(minutes=2)
+        await device.light(
+            sleep=sleep_time,
+        )
+        assert device.status.light_sleep_timer == int(sleep_time.timestamp())
+
+
+@pytest.mark.asyncio
+async def test_light_sleep_int(aresponses):
+    """Test to make sure setting light sleep works."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_LIGHT_SLEEP_TIMER] = data[
+            aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER
+        ]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        sleep_time = datetime.now() + timedelta(seconds=120)
+        await device.light(
+            sleep=120,
+        )
+        assert device.status.light_sleep_timer == int(sleep_time.timestamp())
+
+
+@pytest.mark.asyncio
+async def test_light_sleep_clear(aresponses):
+    """Test to make sure setting light sleep works."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_LIGHT_SLEEP_TIMER] = data[
+            aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER
+        ]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    # check to clear timer
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.light(
+            sleep=0,
+        )
+        assert device.status.light_sleep_timer == 0
+
+
+@pytest.mark.asyncio
 async def test_fan(aresponses):
     """Test to make sure setting fan works."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
@@ -188,6 +275,93 @@ async def test_fan(aresponses):
         assert device.status.fan_speed == aiomodernforms.FAN_SPEED_HIGH_VALUE
         assert device.status.fan_direction == aiomodernforms.FAN_DIRECTION_FORWARD
         assert device.status.fan_sleep_timer == int(sleep_time.timestamp())
+
+
+@pytest.mark.asyncio
+async def test_fan_sleep_datetime(aresponses):
+    """Test to make sure setting light sleep works."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_FAN_SLEEP_TIMER in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_FAN_SLEEP_TIMER] = data[
+            aiomodernforms.COMMAND_FAN_SLEEP_TIMER
+        ]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        sleep_time = datetime.now() + timedelta(minutes=2)
+        await device.fan(
+            sleep=sleep_time,
+        )
+        assert device.status.fan_sleep_timer == int(sleep_time.timestamp())
+
+
+@pytest.mark.asyncio
+async def test_fan_sleep_int(aresponses):
+    """Test to make sure setting light sleep works."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_FAN_SLEEP_TIMER in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_FAN_SLEEP_TIMER] = data[
+            aiomodernforms.COMMAND_FAN_SLEEP_TIMER
+        ]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        sleep_time = datetime.now() + timedelta(seconds=120)
+        await device.fan(
+            sleep=120,
+        )
+        assert device.status.fan_sleep_timer == int(sleep_time.timestamp())
+
+
+@pytest.mark.asyncio
+async def test_fan_sleep_clear(aresponses):
+    """Test to make sure setting light sleep works."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_FAN_SLEEP_TIMER in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_FAN_SLEEP_TIMER] = data[
+            aiomodernforms.COMMAND_FAN_SLEEP_TIMER
+        ]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    # check to clear timer
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.fan(
+            sleep=0,
+        )
+        assert device.status.fan_sleep_timer == 0
 
 
 @pytest.mark.asyncio
