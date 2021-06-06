@@ -189,6 +189,16 @@ class ModernFormsDevice:
             )
         return self._device.state
 
+    @property
+    def info(self):
+        """Fan get info."""
+        if self._device is None:
+            raise ModernFormsNotInitializedError(
+                "The device has not been initialized.  "
+                + "Please run update on the device before getting state"
+            )
+        return self._device.info
+
     async def light(
         self,
         *,
