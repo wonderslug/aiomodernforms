@@ -25,6 +25,7 @@ from .const import (
     COMMAND_LIGHT_SLEEP_TIMER,
     COMMAND_QUERY_STATIC_DATA,
     COMMAND_QUERY_STATUS,
+    COMMAND_REBOOT,
     DEFAULT_API_ENDPOINT,
     DEFAULT_PORT,
     DEFAULT_TIMEOUT_SECS,
@@ -318,6 +319,14 @@ class ModernFormsDevice:
     async def adaptive_learning(self, adaptive_learning=bool):
         """Change the adaptive learning state of the device."""
         await self.request(commands={COMMAND_ADAPTIVE_LEARNING: adaptive_learning})
+
+    async def reboot(self):
+        """Send a reboot to the Fan."""
+        try:
+            await self.request(commands={COMMAND_REBOOT: True})
+        except ModernFormsConnectionTimeoutError:
+            # a successful reboot drops the connection
+            pass
 
     async def close(self) -> None:
         """Close open client session."""

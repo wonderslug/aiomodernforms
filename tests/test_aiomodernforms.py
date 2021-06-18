@@ -1,6 +1,7 @@
 """Tests for Async IO Modern Forms Library."""
 import json
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 
@@ -21,6 +22,11 @@ from aiomodernforms.const import (
     STATE_LIGHT_BRIGHTNESS,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
+)
+from aiomodernforms.exceptions import (
+    ModernFormsConnectionError,
+    ModernFormsConnectionTimeoutError,
+    ModernFormsNotInitializedError,
 )
 
 basic_response = {
@@ -75,6 +81,8 @@ async def test_basic_status(aresponses):
             commands={aiomodernforms.COMMAND_LIGHT_POWER: False}
         )
         assert response.fan_on == basic_response["fanOn"]
+        assert device.status.fan_direction == "forward"
+        assert device.info.fan_type == "1818-56"
 
 
 @pytest.mark.asyncio
@@ -506,5 +514,55 @@ async def test_server_error(aresponses):
     )
 
     with pytest.raises(aiomodernforms.ModernFormsError):
+        async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+            await device.update()
+
+
+@pytest.mark.asyncio
+async def test_reboot(aresponses):
+    """Test how reboot is handled."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with patch(
+            "aiomodernforms.ModernFormsDevice.request",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.reboot()
+
+
+@pytest.mark.asyncio
+async def test_status_not_initialized_response():
+    """Test status when not initialized."""
+    with pytest.raises(ModernFormsNotInitializedError):
+        async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+            device.status()
+
+
+@pytest.mark.asyncio
+async def test_info_not_initialized_response():
+    """Test info when not initialized."""
+    with pytest.raises(ModernFormsNotInitializedError):
+        async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+            device.info()
+
+
+@pytest.mark.asyncio
+async def test_empty_response(aresponses):
+    """Test for an Empty Response."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+
+    async def send_empty_state(request):
+        await request.json()
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text="{}",
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=send_empty_state)
+    with pytest.raises(ModernFormsConnectionError):
         async with aiomodernforms.ModernFormsDevice("fan.local") as device:
             await device.update()

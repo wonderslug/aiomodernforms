@@ -14,6 +14,7 @@ COMMAND_AWAY_MODE = "awayModeEnabled"
 COMMAND_FAN_SLEEP_TIMER = "fanSleepTimer"
 COMMAND_LIGHT_SLEEP_TIMER = "lightSleepTimer"
 COMMAND_ADAPTIVE_LEARNING = "adaptiveLearning"
+COMMAND_REBOOT = "reboot"
 
 AWAY_MODE_OFF = False
 AWAY_MODE_ON = True
