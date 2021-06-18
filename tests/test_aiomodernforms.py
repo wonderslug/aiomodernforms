@@ -24,9 +24,9 @@ from aiomodernforms.const import (
     STATE_LIGHT_SLEEP_TIMER,
 )
 from aiomodernforms.exceptions import (
+    ModernFormsConnectionError,
     ModernFormsConnectionTimeoutError,
     ModernFormsNotInitializedError,
-    ModernFormsConnectionError,
 )
 
 basic_response = {
