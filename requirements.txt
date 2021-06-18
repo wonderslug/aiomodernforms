@@ -1,5 +1,5 @@
 # base Modern Forms requirements
-aiohttp==3.7.4.post0
+aiohttp>=3.7.4
 backoff==1.10.0
 packaging==20.9
 yarl==1.6.3
