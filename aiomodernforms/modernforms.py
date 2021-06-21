@@ -314,11 +314,18 @@ class ModernFormsDevice:
 
     async def away(self, away=bool):
         """Change the away state of the device."""
-        await self.request(commands={COMMAND_AWAY_MODE: away})
+        await self.request(
+            commands={COMMAND_AWAY_MODE: away, COMMAND_QUERY_STATUS: True}
+        )
 
     async def adaptive_learning(self, adaptive_learning=bool):
         """Change the adaptive learning state of the device."""
-        await self.request(commands={COMMAND_ADAPTIVE_LEARNING: adaptive_learning})
+        await self.request(
+            commands={
+                COMMAND_ADAPTIVE_LEARNING: adaptive_learning,
+                COMMAND_QUERY_STATUS: True,
+            }
+        )
 
     async def reboot(self):
         """Send a reboot to the Fan."""
