@@ -2,36 +2,45 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
 template: |
-  # What's Changed
+  ## Changes
+
   $CHANGES
 categories:
   - title: 'Breaking'
-    label: 'type: breaking'
+    labels:
+      - 'breaking'
   - title: 'New'
-    label: 'type: feature'
+    labels:
+      - 'feature'
   - title: 'Bug Fixes'
-    label: 'type: bug'
+    labels:
+      - 'bug'
   - title: 'Maintenance'
-    label: 'type: maintenance'
+    labels:
+      - 'maintenance'
+      - 'cleanup'
   - title: 'Documentation'
-    label: 'type: docs'
+    labels:
+      - 'docs'
   - title: 'Dependency Updates'
-    label: 'type: dependencies'
+    labels:
+      - 'dependencies'
 
 version-resolver:
   major:
     labels:
-      - 'type: breaking'
+      - 'breaking'
   minor:
     labels:
-      - 'type: feature'
+      - 'feature'
   patch:
     labels:
-      - 'type: bug'
-      - 'type: maintenance'
-      - 'type: docs'
-      - 'type: dependencies'
-      - 'type: security'
+      - 'bug'
+      - 'maintenance'
+      - 'docs'
+      - 'dependencies'
+      - 'security'
+  default: patch
 
 exclude-labels:
   - 'skip-changelog'
