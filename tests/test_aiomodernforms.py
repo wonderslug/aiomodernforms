@@ -560,6 +560,15 @@ async def test_invalid_setting(aresponses):
         with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
             await device.fan(direction="upwards")
 
+
+@pytest.mark.asyncio
+async def test_invalid_setting_breeze_mode(aresponses):
+    """Test to make sure setting invalid settings are rejected."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=breeze_mode_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
         # fan wind speed invlaid value
         with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
             await device.fan(wind_speed="foo")
