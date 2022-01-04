@@ -560,6 +560,14 @@ async def test_invalid_setting(aresponses):
         with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
             await device.fan(direction="upwards")
 
+        # fan wind speed invlaid value
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.fan(wind_speed="foo")
+
+        # fan wind invlaid value
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.fan(wind="foo")
+
 
 @pytest.mark.asyncio
 async def test_connection_error(aresponses):
