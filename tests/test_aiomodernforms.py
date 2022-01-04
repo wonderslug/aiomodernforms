@@ -354,6 +354,14 @@ async def test_fan_without_breeze_mode(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_nonupdated_device_for_breeze_mode():
+    """Test to make sure breeze mode only looks at initialed device."""
+    with pytest.raises(ModernFormsNotInitializedError):
+        async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+            device.has_breeze_mode()
+
+
+@pytest.mark.asyncio
 async def test_fan_sleep_datetime(aresponses):
     """Test to make sure setting light sleep works."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
