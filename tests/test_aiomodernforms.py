@@ -22,6 +22,8 @@ from aiomodernforms.const import (
     STATE_LIGHT_BRIGHTNESS,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
+    STATE_WIND_POWER,
+    STATE_WIND_SPEED,
 )
 from aiomodernforms.exceptions import (
     ModernFormsConnectionError,
@@ -46,6 +48,28 @@ basic_response = {
     "rfPairModeActive": False,
     "schedule": "",
 }
+
+
+breeze_mode_response = {
+    "adaptiveLearning": False,
+    "awayModeEnabled": False,
+    "clientId": "MF_000000000000",
+    "decommission": False,
+    "factoryReset": False,
+    "fanDirection": "forward",
+    "fanOn": False,
+    "fanSleepTimer": 0,
+    "fanSpeed": 3,
+    "lightBrightness": 50,
+    "lightOn": False,
+    "lightSleepTimer": 0,
+    "resetRfPairList": False,
+    "rfPairModeActive": False,
+    "schedule": "",
+    "wind": False,
+    "windSpeed": 2,
+}
+
 
 basic_info = {
     "clientId": "MF_000000000000",
@@ -283,6 +307,50 @@ async def test_fan(aresponses):
         assert device.status.fan_speed == aiomodernforms.FAN_SPEED_HIGH_VALUE
         assert device.status.fan_direction == aiomodernforms.FAN_DIRECTION_FORWARD
         assert device.status.fan_sleep_timer == int(sleep_time.timestamp())
+
+
+@pytest.mark.asyncio
+async def test_fan_with_breeze_mode(aresponses):
+    """Test to make sure setting fan breeze mode support works."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=breeze_mode_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_WIND in data
+        assert aiomodernforms.COMMAND_WIND_SPEED in data
+        modified_response = breeze_mode_response.copy()
+        modified_response[STATE_WIND_POWER] = data[aiomodernforms.COMMAND_WIND]
+        modified_response[STATE_WIND_SPEED] = data[aiomodernforms.COMMAND_WIND_SPEED]
+
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.has_breeze_mode()
+        await device.fan(
+            wind_speed=aiomodernforms.WIND_SPEED_HIGH_VALUE,
+            wind=aiomodernforms.WIND_ON,
+        )
+        assert device.status.wind == aiomodernforms.WIND_ON
+        assert device.status.wind_speed == aiomodernforms.WIND_SPEED_HIGH_VALUE
+
+
+@pytest.mark.asyncio
+async def test_fan_without_breeze_mode(aresponses):
+    """Test to make sure setting fan breeze mode support works."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert not device.has_breeze_mode()
 
 
 @pytest.mark.asyncio

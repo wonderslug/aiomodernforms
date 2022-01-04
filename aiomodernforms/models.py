@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Dict
 
 from .const import (
+    DEFAULT_WIND_SPEED,
     INFO_CLIENT_ID,
     INFO_DEVICE_NAME,
     INFO_FAN_MOTOR_TYPE,
@@ -27,6 +28,8 @@ from .const import (
     STATE_LIGHT_BRIGHTNESS,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
+    STATE_WIND_POWER,
+    STATE_WIND_SPEED,
 )
 
 
@@ -81,6 +84,8 @@ class State:
     light_sleep_timer: int
     away_mode_enabled: bool
     adaptive_learning_enabled: bool
+    wind: bool
+    wind_speed: int
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> State:
@@ -95,6 +100,8 @@ class State:
             light_sleep_timer=data.get(STATE_LIGHT_SLEEP_TIMER, 0),
             away_mode_enabled=data.get(STATE_AWAY_MODE, False),
             adaptive_learning_enabled=data.get(STATE_ADAPTIVE_LEARNING, False),
+            wind=data.get(STATE_WIND_POWER, None),
+            wind_speed=data.get(STATE_WIND_SPEED, DEFAULT_WIND_SPEED),
         )
 
 
@@ -117,3 +124,7 @@ class Device:
         if info_data is not None:
             self.info = Info.from_dict(info_data)
         return self
+
+    def has_wind(self) -> bool:
+        """See if the Fan has Breeze Mode."""
+        return self.state.wind is not None

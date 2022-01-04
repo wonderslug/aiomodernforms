@@ -26,6 +26,8 @@ from .const import (
     COMMAND_QUERY_STATIC_DATA,
     COMMAND_QUERY_STATUS,
     COMMAND_REBOOT,
+    COMMAND_WIND,
+    COMMAND_WIND_SPEED,
     DEFAULT_API_ENDPOINT,
     DEFAULT_PORT,
     DEFAULT_TIMEOUT_SECS,
@@ -36,6 +38,8 @@ from .const import (
     LIGHT_BRIGHTNESS_HIGH_VALUE,
     LIGHT_BRIGHTNESS_LOW_VALUE,
     SLEEP_TIMER_CANCEL,
+    WIND_SPEED_HIGH_VALUE,
+    WIND_SPEED_LOW_VALUE,
 )
 from .exceptions import (
     ModernFormsConnectionError,
@@ -196,9 +200,18 @@ class ModernFormsDevice:
         if self._device is None:
             raise ModernFormsNotInitializedError(
                 "The device has not been initialized.  "
-                + "Please run update on the device before getting state"
+                + "Please run update on the device before getting info"
             )
         return self._device.info
+
+    def has_breeze_mode(self):
+        """See if the Fan has Breeze Mode."""
+        if self._device is None:
+            raise ModernFormsNotInitializedError(
+                "The device has not been initialized.  "
+                + "Please run update on the device before getting state"
+            )
+        return self._device.has_wind()
 
     async def light(
         self,
@@ -257,6 +270,8 @@ class ModernFormsDevice:
         sleep: Optional[Union[int, datetime]] = None,
         speed: Optional[int] = None,
         direction: Optional[str] = None,
+        wind: Optional[bool] = None,
+        wind_speed: Optional[int] = None,
     ):
         """Change Fans Fan state."""
         commands: Dict[str, Union[bool, int, str]] = {}
@@ -309,6 +324,24 @@ class ModernFormsDevice:
                     + f" or {FAN_DIRECTION_REVERSE}"
                 )
             commands[COMMAND_FAN_DIRECTION] = direction
+
+        if self._device is not None and self._device.has_wind():
+            if wind_speed is not None:
+                if (
+                    not isinstance(wind_speed, int)
+                    or int(wind_speed) < WIND_SPEED_LOW_VALUE
+                    or int(wind_speed) > WIND_SPEED_HIGH_VALUE
+                ):
+                    raise ModernFormsInvalidSettingsError(
+                        "wind_speed value must be between"
+                        + f" {WIND_SPEED_LOW_VALUE} and {WIND_SPEED_HIGH_VALUE}"
+                    )
+                commands[COMMAND_WIND_SPEED] = wind_speed
+
+            if wind is not None:
+                if not isinstance(wind, bool):
+                    raise ModernFormsInvalidSettingsError("wind must be a boolean")
+                commands[COMMAND_WIND] = wind
 
         await self.request(commands=commands)
 

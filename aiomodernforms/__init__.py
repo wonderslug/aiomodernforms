@@ -15,6 +15,8 @@ from .const import (  # noqa
     COMMAND_LIGHT_SLEEP_TIMER,
     COMMAND_QUERY_STATUS,
     COMMAND_REBOOT,
+    COMMAND_WIND,
+    COMMAND_WIND_SPEED,
     FAN_DIRECTION_FORWARD,
     FAN_DIRECTION_REVERSE,
     FAN_POWER_OFF,
@@ -25,6 +27,10 @@ from .const import (  # noqa
     LIGHT_BRIGHTNESS_LOW_VALUE,
     LIGHT_POWER_OFF,
     LIGHT_POWER_ON,
+    WIND_OFF,
+    WIND_ON,
+    WIND_SPEED_HIGH_VALUE,
+    WIND_SPEED_LOW_VALUE,
 )
 from .exceptions import (  # noqa
     ModernFormsConnectionError,
