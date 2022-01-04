@@ -9,7 +9,7 @@ from aiomodernforms.const import LIGHT_POWER_ON
 
 async def main():
     """Turn on the fan light."""
-    async with aiomodernforms.ModernFormsDevice("192.168.3.197") as fan:
+    async with aiomodernforms.ModernFormsDevice("192.168.3.72") as fan:
         await fan.update()
         print(fan.status)
         await fan.light(
