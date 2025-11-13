@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Union
 
 import aiohttp
-import async_timeout
 import backoff  # type: ignore
 from yarl import URL
 
@@ -140,7 +139,7 @@ class ModernFormsDevice:
             commands = {COMMAND_QUERY_STATUS: True}
 
         try:
-            with async_timeout.timeout(self._request_timeout):
+            async with asyncio.timeout(self._request_timeout):
                 response = await self._session.request(
                     "POST",
                     url,
