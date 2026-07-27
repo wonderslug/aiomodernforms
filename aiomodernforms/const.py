@@ -75,3 +75,10 @@ INFO_MAIN_MCU_FIRMWARE_VERSION = "mainMcuFirmwareVersion"
 INFO_FIRMWARE_URL = "firmwareUrl"
 
 SLEEP_TIMER_CANCEL = 0
+
+STATE_RF_PAIR_MODE_ACTIVE = "rfPairModeActive"
+STATE_RESET_RF_PAIR_LIST = "resetRfPairList"
+STATE_FACTORY_RESET = "factoryReset"
+STATE_DECOMMISSION = "decommission"
+STATE_SCHEDULE = "schedule"
+STATE_USER_DATA = "userData"

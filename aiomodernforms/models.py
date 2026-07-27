@@ -21,6 +21,8 @@ from .const import (
     INFO_PRODUCTION_LOT_NUMBER,
     STATE_ADAPTIVE_LEARNING,
     STATE_AWAY_MODE,
+    STATE_DECOMMISSION,
+    STATE_FACTORY_RESET,
     STATE_FAN_DIRECTION,
     STATE_FAN_POWER,
     STATE_FAN_SLEEP_TIMER,
@@ -28,6 +30,10 @@ from .const import (
     STATE_LIGHT_BRIGHTNESS,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
+    STATE_RESET_RF_PAIR_LIST,
+    STATE_RF_PAIR_MODE_ACTIVE,
+    STATE_SCHEDULE,
+    STATE_USER_DATA,
     STATE_WIND_POWER,
     STATE_WIND_SPEED,
 )
@@ -86,6 +92,12 @@ class State:
     adaptive_learning_enabled: bool
     wind: bool
     wind_speed: int
+    rf_pair_mode_active: bool
+    reset_rf_pair_list: bool
+    factory_reset: bool
+    decommission: bool
+    schedule: str
+    user_data: str
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> State:
@@ -102,6 +114,12 @@ class State:
             adaptive_learning_enabled=data.get(STATE_ADAPTIVE_LEARNING, False),
             wind=data.get(STATE_WIND_POWER, None),
             wind_speed=data.get(STATE_WIND_SPEED, DEFAULT_WIND_SPEED),
+            rf_pair_mode_active=data.get(STATE_RF_PAIR_MODE_ACTIVE, False),
+            reset_rf_pair_list=data.get(STATE_RESET_RF_PAIR_LIST, False),
+            factory_reset=data.get(STATE_FACTORY_RESET, False),
+            decommission=data.get(STATE_DECOMMISSION, False),
+            schedule=data.get(STATE_SCHEDULE, ""),
+            user_data=data.get(STATE_USER_DATA, ""),
         )
 
 

@@ -68,6 +68,7 @@ breeze_mode_response = {
     "resetRfPairList": False,
     "rfPairModeActive": False,
     "schedule": "",
+    "userData": "cloud",
     "wind": False,
     "windSpeed": 2,
 }
@@ -109,6 +110,33 @@ async def test_basic_status(aresponses):
         assert response.fan_on == basic_response["fanOn"]
         assert device.status.fan_direction == "forward"
         assert device.info.fan_type == "1818-56"
+
+
+@pytest.mark.asyncio
+async def test_full_state_capture(aresponses):
+    """Test that all documented dynamic shadow fields are captured on State."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.schedule == basic_response["schedule"]
+        assert device.status.rf_pair_mode_active == basic_response["rfPairModeActive"]
+        assert device.status.reset_rf_pair_list == basic_response["resetRfPairList"]
+        assert device.status.factory_reset == basic_response["factoryReset"]
+        assert device.status.decommission == basic_response["decommission"]
+        assert device.status.user_data == ""
+
+
+@pytest.mark.asyncio
+async def test_gen3_user_data_capture(aresponses):
+    """Test that Gen 3's userData field is captured on State."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=breeze_mode_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.user_data == breeze_mode_response["userData"]
 
 
 @pytest.mark.asyncio
