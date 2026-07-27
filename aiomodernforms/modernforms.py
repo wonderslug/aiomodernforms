@@ -34,6 +34,7 @@ from .const import (
     COMMAND_SCHEDULE,
     COMMAND_WIND,
     COMMAND_WIND_SPEED,
+    CONFIG_READ_API_ENDPOINT,
     DEFAULT_API_ENDPOINT,
     DEFAULT_PORT,
     DEFAULT_TIMEOUT_SECS,
@@ -55,7 +56,7 @@ from .exceptions import (
     ModernFormsInvalidSettingsError,
     ModernFormsNotInitializedError,
 )
-from .models import Device
+from .models import ConfigInfo, Device
 
 
 class ModernFormsDevice:
@@ -96,8 +97,6 @@ class ModernFormsDevice:
         if self._base_path[-1] != "/":
             self._base_path += "/"
 
-        self._base_path += DEFAULT_API_ENDPOINT
-
     @backoff.on_exception(
         backoff.expo, ModernFormsEmptyResponseError, max_tries=3, logger=None
     )
@@ -118,14 +117,16 @@ class ModernFormsDevice:
     @backoff.on_exception(
         backoff.expo, ModernFormsConnectionError, max_tries=3, logger=None
     )
-    async def _request(self, commands: Optional[dict] = None) -> Any:
+    async def _request(
+        self, commands: Optional[dict] = None, path: str = DEFAULT_API_ENDPOINT
+    ) -> Any:
         """Handle a request to a Modern Forms Fan device."""
         scheme = "https" if self._tls else "http"
         url = URL.build(
             scheme=scheme,
             host=self._host,
             port=self._port,
-            path=self._base_path,
+            path=self._base_path + path,
         )
 
         auth = None
@@ -209,6 +210,12 @@ class ModernFormsDevice:
                 + "Please run update on the device before getting info"
             )
         return self._device.info
+
+    async def config(self) -> ConfigInfo:
+        """Retrieve config-read data: hardware revision, RF library version,
+        certificate ID, and current Wi-Fi signal strength."""
+        config_data = await self._request(commands={}, path=CONFIG_READ_API_ENDPOINT)
+        return ConfigInfo.from_dict(config_data)
 
     def has_breeze_mode(self):
         """See if the Fan has Breeze Mode."""

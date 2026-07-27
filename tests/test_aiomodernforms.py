@@ -134,6 +134,28 @@ gen3_info = {
 }
 
 
+gen1_2_config_response = {
+    "T": "Current Configuration",
+    "N": "WAC Windermier Fan(83DEF0)",
+    "C": [{"N": "APPLICATION", "C": []}],
+    "PO": "com.modernforms.fan",
+    "HD": "WAC_WINDERMIER_REV_5",
+    "FW": "01.03.0021",
+    "RF": "wl0: Oct  6 2016 01:32:44 version 5.90.230.15 ",
+    "certificateId": "6v6amxh5vbb2qjnkrp2av8i8r1tk1svzwn4ktrr9ds2ljz65ycfq1y026r6b77pt",
+    "Wi-Fi strength": 100,
+}
+
+gen3_config_response = {
+    "Name": "MF_Fan_98E5AC",
+    "Protocol": "com.modernforms.fan",
+    "Firmware Rev": "02.00.0003",
+    "RF Rev": "v3.2.2",
+    "certificateId": "6v6amxh5vbb2qjnkrp2av8i8r1tk1svzwn4ktrr9ds2ljz65ycfq1y026r6b77pt",
+    "Wi-Fi strength": "-48",
+}
+
+
 @pytest.mark.asyncio
 async def test_basic_status(aresponses):
     """Test JSON response is handled correctly."""
@@ -177,6 +199,56 @@ async def test_gen1_2_info_defaults(aresponses):
         await device.update()
         assert device.info.brand is None
         assert device.info.date_code == ""
+
+
+@pytest.mark.asyncio
+async def test_config_gen1_2(aresponses):
+    """Test config() against a Gen 1/2-shaped /config-read response."""
+    aresponses.add(
+        "fan.local", "/config-read", "POST", response=gen1_2_config_response
+    )
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        config = await device.config()
+        assert config.device_name == "WAC Windermier Fan(83DEF0)"
+        assert config.protocol == "com.modernforms.fan"
+        assert config.hardware_revision == "WAC_WINDERMIER_REV_5"
+        assert config.firmware_version == "01.03.0021"
+        assert config.certificate_id.startswith("6v6amxh5vbb2qjnkrp2av8i8r1tk1svzwn4ktrr")
+        assert config.wifi_strength == "100"
+
+
+@pytest.mark.asyncio
+async def test_config_gen3(aresponses):
+    """Test config() against a Gen 3-shaped /config-read response."""
+    aresponses.add(
+        "fan.local", "/config-read", "POST", response=gen3_config_response
+    )
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        config = await device.config()
+        assert config.device_name == "MF_Fan_98E5AC"
+        assert config.protocol == "com.modernforms.fan"
+        assert config.hardware_revision == ""
+        assert config.firmware_version == "02.00.0003"
+        assert config.rf_version == "v3.2.2"
+        assert config.wifi_strength == "-48"
+
+
+@pytest.mark.asyncio
+async def test_config_uses_config_read_path(aresponses):
+    """Test that regular /mf traffic (update()) is unaffected by config()."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+    aresponses.add(
+        "fan.local", "/config-read", "POST", response=gen3_config_response
+    )
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        config = await device.config()
+        assert device.status.fan_on == basic_response["fanOn"]
+        assert config.device_name == "MF_Fan_98E5AC"
 
 
 @pytest.mark.asyncio

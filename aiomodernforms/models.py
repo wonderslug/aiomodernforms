@@ -5,6 +5,17 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from .const import (
+    CONFIG_CERTIFICATE_ID,
+    CONFIG_FIRMWARE_VERSION,
+    CONFIG_FIRMWARE_VERSION_LEGACY,
+    CONFIG_HARDWARE_REVISION,
+    CONFIG_NAME,
+    CONFIG_NAME_LEGACY,
+    CONFIG_PROTOCOL,
+    CONFIG_PROTOCOL_LEGACY,
+    CONFIG_RF_VERSION,
+    CONFIG_RF_VERSION_LEGACY,
+    CONFIG_WIFI_STRENGTH,
     DEFAULT_WIND_SPEED,
     INFO_BRAND,
     INFO_CLIENT_ID,
@@ -82,6 +93,42 @@ class Info:
             firmware_url=data.get(INFO_FIRMWARE_URL, ""),
             brand=data.get(INFO_BRAND),
             date_code=data.get(INFO_DATE_CODE, ""),
+        )
+
+
+@dataclass
+class ConfigInfo:
+    """Config-read info about the Modern Forms device.
+
+    Fetched from a separate `/config-read` endpoint whose response shape
+    differs by fan generation. `wifi_strength` is kept as the raw string
+    the device returned: Gen 1/2 fans report it as a percentage, Gen 3
+    fans report it as a dBm value — callers must interpret it themselves.
+    """
+
+    device_name: str
+    protocol: str
+    hardware_revision: str
+    firmware_version: str
+    rf_version: str
+    certificate_id: str
+    wifi_strength: str
+
+    @staticmethod
+    def from_dict(data: Dict[str, Any]) -> ConfigInfo:
+        """Return ConfigInfo object from a Modern Forms /config-read response."""
+        return ConfigInfo(
+            device_name=data.get(CONFIG_NAME, data.get(CONFIG_NAME_LEGACY, "")),
+            protocol=data.get(CONFIG_PROTOCOL, data.get(CONFIG_PROTOCOL_LEGACY, "")),
+            hardware_revision=data.get(CONFIG_HARDWARE_REVISION, ""),
+            firmware_version=data.get(
+                CONFIG_FIRMWARE_VERSION, data.get(CONFIG_FIRMWARE_VERSION_LEGACY, "")
+            ),
+            rf_version=data.get(
+                CONFIG_RF_VERSION, data.get(CONFIG_RF_VERSION_LEGACY, "")
+            ),
+            certificate_id=data.get(CONFIG_CERTIFICATE_ID, ""),
+            wifi_strength=str(data.get(CONFIG_WIFI_STRENGTH, "")),
         )
 
 
