@@ -84,6 +84,9 @@ docs/_build/
 # pyenv
 .python-version
 
+# superpowers subagent-driven-development scratch workspace
+.superpowers/
+
 # virtualenv
 .venv
 venv/
