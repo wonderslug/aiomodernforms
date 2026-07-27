@@ -47,4 +47,5 @@ from .exceptions import (  # noqa
     ModernFormsInvalidSettingsError,
     ModernFormsNotInitializedError,
 )
+from .models import ConfigInfo  # noqa
 from .modernforms import ModernFormsDevice  # noqa

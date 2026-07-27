@@ -71,8 +71,8 @@ class Info:
     firmware_version: str
     main_mcu_firmware_version: str
     firmware_url: str
-    brand: Optional[int]
-    date_code: str
+    brand: Optional[int] = None
+    date_code: str = ""
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> Info:
@@ -147,14 +147,14 @@ class State:
     adaptive_learning_enabled: bool
     wind: bool
     wind_speed: int
-    rf_pair_mode_active: bool
-    reset_rf_pair_list: bool
-    factory_reset: bool
-    decommission: bool
-    schedule: str
-    user_data: str
-    fan_timer: Optional[int]
-    light_timer: Optional[int]
+    rf_pair_mode_active: bool = False
+    reset_rf_pair_list: bool = False
+    factory_reset: bool = False
+    decommission: bool = False
+    schedule: str = ""
+    user_data: str = ""
+    fan_timer: Optional[int] = None
+    light_timer: Optional[int] = None
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> State:

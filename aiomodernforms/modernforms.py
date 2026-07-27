@@ -264,7 +264,7 @@ class ModernFormsDevice:
             sleep < datetime.now() or sleep > (datetime.now() + timedelta(hours=24))
         ):
             if use_relative:
-                return {command: int((sleep - datetime.now()).total_seconds())}
+                return {command: max(1, int((sleep - datetime.now()).total_seconds()))}
             return {command: int(sleep.timestamp())}
 
         raise ModernFormsInvalidSettingsError(
@@ -281,6 +281,8 @@ class ModernFormsDevice:
         sleep: Optional[Union[int, datetime]] = None,
     ):
         """Change Fans Light state."""
+        if self._device is None:
+            await self.update()
         commands: Dict[str, Union[bool, int]] = {}
 
         if brightness is not None:
@@ -322,6 +324,8 @@ class ModernFormsDevice:
         wind_speed: Optional[int] = None,
     ):
         """Change Fans Fan state."""
+        if self._device is None:
+            await self.update()
         commands: Dict[str, Union[bool, int, str]] = {}
 
         if speed is not None:
