@@ -28,10 +28,10 @@ jobs:
           pre-commit run --all-files --show-diff-on-failure
   test:
     name: Python ${{ matrix.python }} on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu]
+        os: [ubuntu-22.04]
         python: [3.7, 3.8]
     steps:
       - name: Checking out code from GitHub
@@ -49,7 +49,7 @@ jobs:
       - name: Pytest with coverage reporting
         run: pytest --cov=aiomodernforms --cov-report=xml
       - name: Upload coverage to Codecov
-        if: matrix.python == 3.8 && matrix.os == 'ubuntu'
+        if: matrix.python == 3.8 && matrix.os == 'ubuntu-22.04'
         uses: codecov/codecov-action@v3.1.4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
