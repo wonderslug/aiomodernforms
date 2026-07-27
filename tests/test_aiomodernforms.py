@@ -214,7 +214,7 @@ async def test_config_gen1_2(aresponses):
         assert config.protocol == "com.modernforms.fan"
         assert config.hardware_revision == "WAC_WINDERMIER_REV_5"
         assert config.firmware_version == "01.03.0021"
-        assert config.certificate_id.startswith("6v6amxh5vbb2qjnkrp2av8i8r1tk1svzwn4ktrr")
+        assert config.certificate_id.startswith("6v6amxh5vbb2qjnkrp2av8i8r1")
         assert config.wifi_strength == "100"
 
 

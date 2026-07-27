@@ -212,8 +212,11 @@ class ModernFormsDevice:
         return self._device.info
 
     async def config(self) -> ConfigInfo:
-        """Retrieve config-read data: hardware revision, RF library version,
-        certificate ID, and current Wi-Fi signal strength."""
+        """Retrieve config-read data.
+
+        Includes hardware revision, RF library version, certificate ID,
+        and current Wi-Fi signal strength.
+        """
         config_data = await self._request(commands={}, path=CONFIG_READ_API_ENDPOINT)
         return ConfigInfo.from_dict(config_data)
 
