@@ -622,11 +622,9 @@ class State:
     fan_speed: int
     fan_direction: str
     fan_sleep_timer: int
-    fan_timer: Optional[int]
     light_on: bool
     light_brightness: int
     light_sleep_timer: int
-    light_timer: Optional[int]
     away_mode_enabled: bool
     adaptive_learning_enabled: bool
     wind: bool
@@ -637,6 +635,8 @@ class State:
     decommission: bool
     schedule: str
     user_data: str
+    fan_timer: Optional[int]
+    light_timer: Optional[int]
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> State:
@@ -646,11 +646,9 @@ class State:
             fan_speed=data.get(STATE_FAN_SPEED, 6),
             fan_direction=data.get(STATE_FAN_DIRECTION, "forward"),
             fan_sleep_timer=data.get(STATE_FAN_SLEEP_TIMER, 0),
-            fan_timer=data.get(STATE_FAN_TIMER),
             light_on=data.get(STATE_LIGHT_POWER, False),
             light_brightness=data.get(STATE_LIGHT_BRIGHTNESS, 100),
             light_sleep_timer=data.get(STATE_LIGHT_SLEEP_TIMER, 0),
-            light_timer=data.get(STATE_LIGHT_TIMER),
             away_mode_enabled=data.get(STATE_AWAY_MODE, False),
             adaptive_learning_enabled=data.get(STATE_ADAPTIVE_LEARNING, False),
             wind=data.get(STATE_WIND_POWER, None),
@@ -661,6 +659,8 @@ class State:
             decommission=data.get(STATE_DECOMMISSION, False),
             schedule=data.get(STATE_SCHEDULE, ""),
             user_data=data.get(STATE_USER_DATA, ""),
+            fan_timer=data.get(STATE_FAN_TIMER),
+            light_timer=data.get(STATE_LIGHT_TIMER),
         )
 ```
 
