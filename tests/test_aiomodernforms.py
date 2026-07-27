@@ -26,6 +26,8 @@ from aiomodernforms.const import (
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
     STATE_LIGHT_TIMER,
+    STATE_RF_PAIR_MODE_ACTIVE,
+    STATE_SCHEDULE,
     STATE_WIND_POWER,
     STATE_WIND_SPEED,
 )
@@ -714,6 +716,110 @@ async def test_adaptive_learning(aresponses):
         await device.update()
         await device.adaptive_learning(ADAPTIVE_LEARNING_ON)
         assert device.status.adaptive_learning_enabled
+
+
+@pytest.mark.asyncio
+async def test_enable_pairing_mode(aresponses):
+    """Test enabling RF pairing mode."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_RF_PAIR_MODE in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_RF_PAIR_MODE_ACTIVE] = data[
+            aiomodernforms.COMMAND_RF_PAIR_MODE
+        ]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.enable_pairing_mode()
+        assert device.status.rf_pair_mode_active is True
+
+
+@pytest.mark.asyncio
+async def test_clear_paired_devices(aresponses):
+    """Test clearing RF-paired devices."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data.get(aiomodernforms.COMMAND_RESET_RF_PAIR_LIST) is True
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(basic_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.clear_paired_devices()
+
+
+@pytest.mark.asyncio
+async def test_factory_reset(aresponses):
+    """Test how factory reset is handled, including the resulting disconnect."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with patch(
+            "aiomodernforms.ModernFormsDevice.request",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.factory_reset()
+
+
+@pytest.mark.asyncio
+async def test_decommission(aresponses):
+    """Test how decommission is handled, including the resulting disconnect."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with patch(
+            "aiomodernforms.ModernFormsDevice.request",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.decommission()
+
+
+@pytest.mark.asyncio
+async def test_set_schedule(aresponses):
+    """Test setting the schedule blob."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_SCHEDULE in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_SCHEDULE] = data[aiomodernforms.COMMAND_SCHEDULE]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.set_schedule("AAAAAPwDAGSgBQAAnAkAZEAL")
+        assert device.status.schedule == "AAAAAPwDAGSgBQAAnAkAZEAL"
 
 
 @pytest.mark.asyncio

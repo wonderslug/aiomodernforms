@@ -15,6 +15,8 @@ from .__version__ import __version__
 from .const import (
     COMMAND_ADAPTIVE_LEARNING,
     COMMAND_AWAY_MODE,
+    COMMAND_DECOMMISSION,
+    COMMAND_FACTORY_RESET,
     COMMAND_FAN_DIRECTION,
     COMMAND_FAN_POWER,
     COMMAND_FAN_SLEEP_TIMER,
@@ -27,6 +29,9 @@ from .const import (
     COMMAND_QUERY_STATIC_DATA,
     COMMAND_QUERY_STATUS,
     COMMAND_REBOOT,
+    COMMAND_RESET_RF_PAIR_LIST,
+    COMMAND_RF_PAIR_MODE,
+    COMMAND_SCHEDULE,
     COMMAND_WIND,
     COMMAND_WIND_SPEED,
     DEFAULT_API_ENDPOINT,
@@ -378,6 +383,38 @@ class ModernFormsDevice:
                 COMMAND_QUERY_STATUS: True,
             }
         )
+
+    async def enable_pairing_mode(self, active: bool = True):
+        """Toggle RF pairing mode, used to pair remotes or wall controls."""
+        await self.request(commands={COMMAND_RF_PAIR_MODE: active})
+
+    async def clear_paired_devices(self):
+        """Clear all RF-paired devices (remotes, wall controls) from the fan."""
+        await self.request(commands={COMMAND_RESET_RF_PAIR_LIST: True})
+
+    async def factory_reset(self):
+        """Factory reset the fan.
+
+        Clears Wi-Fi credentials, decommissions the fan from the cloud,
+        clears RF pairings, and returns the fan to AP mode.
+        """
+        try:
+            await self.request(commands={COMMAND_FACTORY_RESET: True})
+        except ModernFormsConnectionTimeoutError:
+            # a successful factory reset drops the connection
+            pass
+
+    async def decommission(self):
+        """Decommission the fan from the cloud and return it to AP mode."""
+        try:
+            await self.request(commands={COMMAND_DECOMMISSION: True})
+        except ModernFormsConnectionTimeoutError:
+            # a successful decommission drops the connection
+            pass
+
+    async def set_schedule(self, data: str):
+        """Set the fan's base64-encoded schedule blob."""
+        await self.request(commands={COMMAND_SCHEDULE: data})
 
     async def reboot(self):
         """Send a reboot to the Fan."""

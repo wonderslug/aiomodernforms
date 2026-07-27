@@ -91,3 +91,9 @@ STATE_LIGHT_TIMER = "lightTimer"
 
 COMMAND_FAN_TIMER = "fanTimer"
 COMMAND_LIGHT_TIMER = "lightTimer"
+
+COMMAND_RF_PAIR_MODE = "rfPairModeActive"
+COMMAND_RESET_RF_PAIR_LIST = "resetRfPairList"
+COMMAND_FACTORY_RESET = "factoryReset"
+COMMAND_DECOMMISSION = "decommission"
+COMMAND_SCHEDULE = "schedule"
