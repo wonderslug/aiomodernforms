@@ -503,6 +503,22 @@ async def test_adaptive_learning(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_away_requires_argument():
+    """Test that away() requires an explicit boolean argument."""
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        with pytest.raises(TypeError):
+            await device.away()  # type: ignore[call-arg]
+
+
+@pytest.mark.asyncio
+async def test_adaptive_learning_requires_argument():
+    """Test that adaptive_learning() requires an explicit boolean argument."""
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        with pytest.raises(TypeError):
+            await device.adaptive_learning()  # type: ignore[call-arg]
+
+
+@pytest.mark.asyncio
 async def test_invalid_setting(aresponses):
     """Test to make sure setting invalid settings are rejected."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
