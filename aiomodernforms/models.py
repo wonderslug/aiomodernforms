@@ -116,7 +116,7 @@ class Device:
         self.update_from_dict(state_data=state_data, info_data=info_data)
 
     def update_from_dict(
-        self, state_data: dict = None, info_data: dict = None
+        self, state_data: dict | None = None, info_data: dict | None = None
     ) -> "Device":
         """Update the device status with the passed dict."""
         if state_data is not None:

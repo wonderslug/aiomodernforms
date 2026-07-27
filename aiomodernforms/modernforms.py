@@ -65,7 +65,7 @@ class ModernFormsDevice:
         username: str = "",
         password: str = "",
         request_timeout: float = DEFAULT_TIMEOUT_SECS,
-        session: aiohttp.client.ClientSession = None,
+        session: aiohttp.client.ClientSession | None = None,
         tls: bool = False,
         verify_ssl: bool = True,
         user_agent: str = None,  # type: ignore
