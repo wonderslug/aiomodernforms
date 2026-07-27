@@ -3,12 +3,14 @@ import json
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
+import aiohttp
 import pytest
 
 import aiomodernforms
 from aiomodernforms.const import (
     ADAPTIVE_LEARNING_ON,
     AWAY_MODE_ON,
+    COMMAND_QUERY_STATIC_DATA,
     FAN_SPEED_HIGH_VALUE,
     FAN_SPEED_LOW_VALUE,
     LIGHT_BRIGHTNESS_HIGH_VALUE,
@@ -26,8 +28,8 @@ from aiomodernforms.const import (
     STATE_WIND_SPEED,
 )
 from aiomodernforms.exceptions import (
-    ModernFormsConnectionError,
     ModernFormsConnectionTimeoutError,
+    ModernFormsEmptyResponseError,
     ModernFormsNotInitializedError,
 )
 
@@ -587,12 +589,15 @@ async def test_invalid_setting_breeze_mode(aresponses):
 
 
 @pytest.mark.asyncio
-async def test_connection_error(aresponses):
+async def test_connection_error():
     """Test to make validate proper connection error handling."""
-    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     with pytest.raises(aiomodernforms.ModernFormsConnectionError):
         async with aiomodernforms.ModernFormsDevice("fan.local") as device:
-            await device.update()
+            with patch(
+                "aiohttp.ClientSession.request",
+                side_effect=aiohttp.ClientConnectionError,
+            ):
+                await device.update()
 
 
 @pytest.mark.asyncio
@@ -643,19 +648,19 @@ async def test_info_not_initialized_response():
 
 
 @pytest.mark.asyncio
-async def test_empty_response(aresponses):
+async def test_empty_response():
     """Test for an Empty Response."""
-    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
 
-    async def send_empty_state(request):
-        await request.json()
-        return aresponses.Response(
-            status=200,
-            content_type="application/json",
-            text="{}",
-        )
+    async def fake_request(_self, commands=None):
+        if commands and commands.get(COMMAND_QUERY_STATIC_DATA):
+            return basic_info
+        return {}
 
-    aresponses.add("fan.local", "/mf", "POST", response=send_empty_state)
-    with pytest.raises(ModernFormsConnectionError):
+    with pytest.raises(ModernFormsEmptyResponseError):
         async with aiomodernforms.ModernFormsDevice("fan.local") as device:
-            await device.update()
+            with patch(
+                "aiomodernforms.ModernFormsDevice._request",
+                side_effect=fake_request,
+                autospec=True,
+            ):
+                await device.update()
