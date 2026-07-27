@@ -22,7 +22,7 @@ def read(*parts):
         return fp.read()
 
 
-with open("README.md") as readme_file:
+with open("README.md", encoding="utf-8") as readme_file:
     readme = readme_file.read()
 
 setup(
