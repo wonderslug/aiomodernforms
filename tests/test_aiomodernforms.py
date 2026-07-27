@@ -21,9 +21,11 @@ from aiomodernforms.const import (
     STATE_FAN_POWER,
     STATE_FAN_SLEEP_TIMER,
     STATE_FAN_SPEED,
+    STATE_FAN_TIMER,
     STATE_LIGHT_BRIGHTNESS,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
+    STATE_LIGHT_TIMER,
     STATE_WIND_POWER,
     STATE_WIND_SPEED,
 )
@@ -488,6 +490,91 @@ async def test_nonupdated_device_for_relative_timers():
     with pytest.raises(ModernFormsNotInitializedError):
         async with aiomodernforms.ModernFormsDevice("fan.local") as device:
             device.has_relative_timers()
+
+
+@pytest.mark.asyncio
+async def test_light_sleep_relative_timer_int(aresponses):
+    """Test that light sleep uses relative seconds on a Gen 3-style device."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add(
+        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
+    )
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_TIMER in data
+        assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER not in data
+        assert data[aiomodernforms.COMMAND_LIGHT_TIMER] == 120
+        modified_response = gen3_relative_timer_response.copy()
+        modified_response[STATE_LIGHT_TIMER] = data[aiomodernforms.COMMAND_LIGHT_TIMER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(sleep=120)
+        assert device.status.light_timer == 120
+
+
+@pytest.mark.asyncio
+async def test_fan_sleep_relative_timer_datetime(aresponses):
+    """Test that fan sleep uses relative seconds on a Gen 3-style device."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add(
+        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
+    )
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_FAN_TIMER in data
+        assert aiomodernforms.COMMAND_FAN_SLEEP_TIMER not in data
+        modified_response = gen3_relative_timer_response.copy()
+        modified_response[STATE_FAN_TIMER] = data[aiomodernforms.COMMAND_FAN_TIMER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        sleep_time = datetime.now() + timedelta(minutes=2)
+        await device.fan(sleep=sleep_time)
+        assert device.status.fan_timer == pytest.approx(120, abs=2)
+
+
+@pytest.mark.asyncio
+async def test_light_sleep_relative_timer_clear(aresponses):
+    """Test that sleep=0 cancels the timer under relative-timer semantics too."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add(
+        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
+    )
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data.get(aiomodernforms.COMMAND_LIGHT_TIMER) == 0
+        modified_response = gen3_relative_timer_response.copy()
+        modified_response[STATE_LIGHT_TIMER] = 0
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(sleep=0)
+        assert device.status.light_timer == 0
 
 
 @pytest.mark.asyncio

@@ -88,3 +88,6 @@ INFO_DATE_CODE = "dateCode"
 
 STATE_FAN_TIMER = "fanTimer"
 STATE_LIGHT_TIMER = "lightTimer"
+
+COMMAND_FAN_TIMER = "fanTimer"
+COMMAND_LIGHT_TIMER = "lightTimer"

@@ -19,9 +19,11 @@ from .const import (
     COMMAND_FAN_POWER,
     COMMAND_FAN_SLEEP_TIMER,
     COMMAND_FAN_SPEED,
+    COMMAND_FAN_TIMER,
     COMMAND_LIGHT_BRIGHTNESS,
     COMMAND_LIGHT_POWER,
     COMMAND_LIGHT_SLEEP_TIMER,
+    COMMAND_LIGHT_TIMER,
     COMMAND_QUERY_STATIC_DATA,
     COMMAND_QUERY_STATUS,
     COMMAND_REBOOT,
@@ -221,6 +223,41 @@ class ModernFormsDevice:
             )
         return self._device.has_relative_timers()
 
+    def _sleep_command(
+        self, epoch_command: str, relative_command: str, sleep: Union[int, datetime]
+    ) -> Dict[str, int]:
+        """Build the timer command for `sleep`.
+
+        Gen 1/2 fans store sleep timers as an epoch timestamp under
+        `epoch_command`. Gen 3 fans store them as seconds-until-off under
+        `relative_command`. Which one a given device uses is only knowable
+        after `update()` has populated `has_relative_timers()`; before that,
+        epoch semantics (the historical default) are used.
+        """
+        use_relative = self._device is not None and self._device.has_relative_timers()
+        command = relative_command if use_relative else epoch_command
+
+        if isinstance(sleep, int):
+            if sleep <= 0:
+                return {command: SLEEP_TIMER_CANCEL}
+            if use_relative:
+                return {command: sleep}
+            sleep_till = datetime.now() + timedelta(seconds=sleep)
+            return {command: int(sleep_till.timestamp())}
+
+        if isinstance(sleep, datetime) and not (
+            sleep < datetime.now() or sleep > (datetime.now() + timedelta(hours=24))
+        ):
+            if use_relative:
+                return {command: int((sleep - datetime.now()).total_seconds())}
+            return {command: int(sleep.timestamp())}
+
+        raise ModernFormsInvalidSettingsError(
+            "The time to sleep till must be a datetime object that is not more"
+            + " then 24 hours into the future, or an interger for number of"
+            + " seconds to sleep. 0 cancels the sleep timer."
+        )
+
     async def light(
         self,
         *,
@@ -251,23 +288,11 @@ class ModernFormsDevice:
             commands[COMMAND_LIGHT_POWER] = on
 
         if sleep is not None:
-            if isinstance(sleep, int):
-                # turns off sleep timer
-                commands[COMMAND_LIGHT_SLEEP_TIMER] = SLEEP_TIMER_CANCEL
-                if sleep > 0:
-                    # count as number of seconds to sleep
-                    sleep_till = datetime.now() + timedelta(seconds=sleep)
-                    commands[COMMAND_LIGHT_SLEEP_TIMER] = int(sleep_till.timestamp())
-            elif isinstance(sleep, datetime) and not (
-                sleep < datetime.now() or sleep > (datetime.now() + timedelta(hours=24))
-            ):
-                commands[COMMAND_LIGHT_SLEEP_TIMER] = int(sleep.timestamp())
-            else:
-                raise ModernFormsInvalidSettingsError(
-                    "The time to sleep till must be a datetime object that is not more"
-                    + " then 24 hours into the future, or an interger for number of"
-                    + " seconds to sleep. 0 cancels the sleep timer."
+            commands.update(
+                self._sleep_command(
+                    COMMAND_LIGHT_SLEEP_TIMER, COMMAND_LIGHT_TIMER, sleep
                 )
+            )
 
         await self.request(commands=commands)
 
@@ -304,23 +329,9 @@ class ModernFormsDevice:
             commands[COMMAND_FAN_POWER] = on
 
         if sleep is not None:
-            if isinstance(sleep, int):
-                # turns off sleep timer
-                commands[COMMAND_FAN_SLEEP_TIMER] = SLEEP_TIMER_CANCEL
-                if sleep > 0:
-                    # count as number of seconds to sleep
-                    sleep_till = datetime.now() + timedelta(seconds=sleep)
-                    commands[COMMAND_FAN_SLEEP_TIMER] = int(sleep_till.timestamp())
-            elif isinstance(sleep, datetime) and not (
-                sleep < datetime.now() or sleep > (datetime.now() + timedelta(hours=24))
-            ):
-                commands[COMMAND_FAN_SLEEP_TIMER] = int(sleep.timestamp())
-            else:
-                raise ModernFormsInvalidSettingsError(
-                    "The time to sleep till must be a datetime object that is not more"
-                    + " then 24 hours into the future, or an interger for number of"
-                    + " seconds to sleep. 0 cancels the sleep timer."
-                )
+            commands.update(
+                self._sleep_command(COMMAND_FAN_SLEEP_TIMER, COMMAND_FAN_TIMER, sleep)
+            )
 
         if direction is not None:
             if not isinstance(direction, str) or direction not in [
