@@ -85,3 +85,6 @@ STATE_USER_DATA = "userData"
 
 INFO_BRAND = "brand"
 INFO_DATE_CODE = "dateCode"
+
+STATE_FAN_TIMER = "fanTimer"
+STATE_LIGHT_TIMER = "lightTimer"

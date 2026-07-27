@@ -74,6 +74,28 @@ breeze_mode_response = {
 }
 
 
+gen3_relative_timer_response = {
+    "adaptiveLearning": False,
+    "awayModeEnabled": False,
+    "clientId": "MF_C82B9698E5AC",
+    "decommission": False,
+    "factoryReset": False,
+    "fanDirection": "forward",
+    "fanOn": False,
+    "fanTimer": 0,
+    "fanSpeed": 3,
+    "lightBrightness": 50,
+    "lightOn": False,
+    "lightTimer": 0,
+    "resetRfPairList": False,
+    "rfPairModeActive": False,
+    "schedule": "",
+    "userData": "cloud",
+    "wind": False,
+    "windSpeed": 2,
+}
+
+
 basic_info = {
     "clientId": "MF_000000000000",
     "mac": "CC:CC:CC:CC:CC:CC",
@@ -430,6 +452,42 @@ async def test_nonupdated_device_for_breeze_mode():
     with pytest.raises(ModernFormsNotInitializedError):
         async with aiomodernforms.ModernFormsDevice("fan.local") as device:
             device.has_breeze_mode()
+
+
+@pytest.mark.asyncio
+async def test_has_relative_timers_true_for_gen3(aresponses):
+    """Test that a Gen 3-style response (fanTimer/lightTimer) is detected."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add(
+        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
+    )
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.fan_timer == gen3_relative_timer_response["fanTimer"]
+        assert device.status.light_timer == gen3_relative_timer_response["lightTimer"]
+        assert device.has_relative_timers() is True
+
+
+@pytest.mark.asyncio
+async def test_has_relative_timers_false_for_gen1_2(aresponses):
+    """Test that a Gen 1/2-style response is not mistaken for relative timers."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.fan_timer is None
+        assert device.status.light_timer is None
+        assert device.has_relative_timers() is False
+
+
+@pytest.mark.asyncio
+async def test_nonupdated_device_for_relative_timers():
+    """Test that has_relative_timers only looks at an initialized device."""
+    with pytest.raises(ModernFormsNotInitializedError):
+        async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+            device.has_relative_timers()
 
 
 @pytest.mark.asyncio

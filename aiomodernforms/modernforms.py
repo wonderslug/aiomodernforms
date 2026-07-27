@@ -212,6 +212,15 @@ class ModernFormsDevice:
             )
         return self._device.has_wind()
 
+    def has_relative_timers(self):
+        """See if the Fan uses relative (seconds-until-off) sleep timers."""
+        if self._device is None:
+            raise ModernFormsNotInitializedError(
+                "The device has not been initialized.  "
+                + "Please run update on the device before getting state"
+            )
+        return self._device.has_relative_timers()
+
     async def light(
         self,
         *,

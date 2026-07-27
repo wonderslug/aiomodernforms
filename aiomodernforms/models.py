@@ -29,9 +29,11 @@ from .const import (
     STATE_FAN_POWER,
     STATE_FAN_SLEEP_TIMER,
     STATE_FAN_SPEED,
+    STATE_FAN_TIMER,
     STATE_LIGHT_BRIGHTNESS,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
+    STATE_LIGHT_TIMER,
     STATE_RESET_RF_PAIR_LIST,
     STATE_RF_PAIR_MODE_ACTIVE,
     STATE_SCHEDULE,
@@ -104,6 +106,8 @@ class State:
     decommission: bool
     schedule: str
     user_data: str
+    fan_timer: Optional[int]
+    light_timer: Optional[int]
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> State:
@@ -126,6 +130,8 @@ class State:
             decommission=data.get(STATE_DECOMMISSION, False),
             schedule=data.get(STATE_SCHEDULE, ""),
             user_data=data.get(STATE_USER_DATA, ""),
+            fan_timer=data.get(STATE_FAN_TIMER),
+            light_timer=data.get(STATE_LIGHT_TIMER),
         )
 
 
@@ -152,3 +158,7 @@ class Device:
     def has_wind(self) -> bool:
         """See if the Fan has Breeze Mode."""
         return self.state.wind is not None
+
+    def has_relative_timers(self) -> bool:
+        """See if the Fan uses relative (seconds-until-off) sleep timers."""
+        return self.state.fan_timer is not None or self.state.light_timer is not None
