@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from .const import (
     DEFAULT_WIND_SPEED,
+    INFO_BRAND,
     INFO_CLIENT_ID,
+    INFO_DATE_CODE,
     INFO_DEVICE_NAME,
     INFO_FAN_MOTOR_TYPE,
     INFO_FAN_TYPE,
@@ -56,6 +58,8 @@ class Info:
     firmware_version: str
     main_mcu_firmware_version: str
     firmware_url: str
+    brand: Optional[int]
+    date_code: str
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> Info:
@@ -74,6 +78,8 @@ class Info:
             firmware_version=data.get(INFO_FIRMWARE_VERSION, ""),
             main_mcu_firmware_version=data.get(INFO_MAIN_MCU_FIRMWARE_VERSION, ""),
             firmware_url=data.get(INFO_FIRMWARE_URL, ""),
+            brand=data.get(INFO_BRAND),
+            date_code=data.get(INFO_DATE_CODE, ""),
         )
 
 

@@ -91,6 +91,23 @@ basic_info = {
 }
 
 
+gen3_info = {
+    "clientId": "MF_C82B9698E5AC",
+    "mac": "C8:2B:96:98:E5:AC",
+    "lightType": "",
+    "fanType": "2003-52",
+    "fanMotorType": "DC125X12",
+    "brand": 0,
+    "dateCode": "20220101",
+    "owner": "someone@somewhere.com",
+    "federatedIdentity": "us-east-1:f3da237b-c19c-4f61-b387-0e6dde2e470b",
+    "deviceName": "Fan",
+    "firmwareVersion": "02.00.0003",
+    "mainMcuFirmwareVersion": "02.01.0000",
+    "firmwareUrl": "",
+}
+
+
 @pytest.mark.asyncio
 async def test_basic_status(aresponses):
     """Test JSON response is handled correctly."""
@@ -110,6 +127,30 @@ async def test_basic_status(aresponses):
         assert response.fan_on == basic_response["fanOn"]
         assert device.status.fan_direction == "forward"
         assert device.info.fan_type == "1818-56"
+
+
+@pytest.mark.asyncio
+async def test_gen3_info_capture(aresponses):
+    """Test that Gen 3's brand and dateCode info fields are captured."""
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.info.brand == gen3_info["brand"]
+        assert device.info.date_code == gen3_info["dateCode"]
+
+
+@pytest.mark.asyncio
+async def test_gen1_2_info_defaults(aresponses):
+    """Test that Gen 1/2 info responses default brand/dateCode sensibly."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.info.brand is None
+        assert device.info.date_code == ""
 
 
 @pytest.mark.asyncio

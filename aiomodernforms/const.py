@@ -82,3 +82,6 @@ STATE_FACTORY_RESET = "factoryReset"
 STATE_DECOMMISSION = "decommission"
 STATE_SCHEDULE = "schedule"
 STATE_USER_DATA = "userData"
+
+INFO_BRAND = "brand"
+INFO_DATE_CODE = "dateCode"
