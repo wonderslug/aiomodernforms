@@ -25,8 +25,8 @@ Full parity: fix the timer bug, capture every documented field, add every docume
 `State` gains two new fields alongside the existing epoch-based ones:
 
 ```python
-fan_timer: Optional[int] = None   # Gen 3: seconds until fan turns off
-light_timer: Optional[int] = None # Gen 3: seconds until light turns off
+fan_timer: Optional[int] = None  # Gen 3: seconds until fan turns off
+light_timer: Optional[int] = None  # Gen 3: seconds until light turns off
 ```
 
 Populated via `data.get(STATE_FAN_TIMER)` / `data.get(STATE_LIGHT_TIMER)`, defaulting to `None` when absent (Gen 1/2 responses).
@@ -69,7 +69,7 @@ New constants: `STATE_RF_PAIR_MODE_ACTIVE`, `STATE_RESET_RF_PAIR_LIST`, `STATE_F
 
 On `ModernFormsDevice`, following the existing `away()`/`adaptive_learning()`/`reboot()` conventions:
 
-```python
+```text
 async def enable_pairing_mode(self, active: bool = True) -> None
 async def clear_paired_devices(self) -> None       # fire-once trigger, like reboot()
 async def factory_reset(self) -> None              # fire-once; swallows ModernFormsConnectionTimeoutError
@@ -108,12 +108,12 @@ New `ConfigInfo` dataclass:
 class ConfigInfo:
     device_name: str
     protocol: str
-    hardware_revision: str   # empty string on Gen 3, which doesn't send HD
+    hardware_revision: str  # empty string on Gen 3, which doesn't send HD
     firmware_version: str
     rf_version: str
     certificate_id: str
-    wifi_strength: str       # raw value; unit (percentage vs dBm) depends on
-                              # generation — callers should not assume percentage
+    wifi_strength: str  # raw value; unit (percentage vs dBm) depends on
+    # generation — callers should not assume percentage
 ```
 
 New method: `ModernFormsDevice.config() -> ConfigInfo`. Standalone/opt-in — not folded into `update()`, since it's an extra round-trip most callers won't need on every poll.

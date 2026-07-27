@@ -403,7 +403,7 @@ class ModernFormsDevice:
         await self.request(commands={COMMAND_RESET_RF_PAIR_LIST: True})
 
     async def factory_reset(self):
-        """Factory reset the fan.
+        """Reset the fan to factory defaults.
 
         Clears Wi-Fi credentials, decommissions the fan from the cloud,
         clears RF pairings, and returns the fan to AP mode.

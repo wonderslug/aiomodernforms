@@ -62,25 +62,25 @@ Expected: FAIL — no `TypeError` is raised (the call instead hangs trying to ma
 
 In `aiomodernforms/modernforms.py`, change:
 
-```python
+```text
     async def away(self, away=bool):
 ```
 
 to:
 
-```python
+```text
     async def away(self, away: bool):
 ```
 
 And change:
 
-```python
+```text
     async def adaptive_learning(self, adaptive_learning=bool):
 ```
 
 to:
 
-```python
+```text
     async def adaptive_learning(self, adaptive_learning: bool):
 ```
 
@@ -178,7 +178,6 @@ Expected: FAIL with `AttributeError: 'State' object has no attribute 'schedule'`
 Append to `aiomodernforms/const.py` (after line 77, `SLEEP_TIMER_CANCEL = 0`):
 
 ```python
-
 STATE_RF_PAIR_MODE_ACTIVE = "rfPairModeActive"
 STATE_RESET_RF_PAIR_LIST = "resetRfPairList"
 STATE_FACTORY_RESET = "factoryReset"
@@ -360,7 +359,6 @@ Expected: FAIL with `TypeError: Info.__init__() got an unexpected keyword argume
 Append to `aiomodernforms/const.py` (after the `STATE_USER_DATA` line added in Task 2):
 
 ```python
-
 INFO_BRAND = "brand"
 INFO_DATE_CODE = "dateCode"
 ```
@@ -520,9 +518,7 @@ Add tests, after `test_nonupdated_device_for_breeze_mode` (currently ending at l
 async def test_has_relative_timers_true_for_gen3(aresponses):
     """Test that a Gen 3-style response (fanTimer/lightTimer) is detected."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
-    aresponses.add(
-        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
-    )
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
 
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
         await device.update()
@@ -562,7 +558,6 @@ Expected: FAIL with `AttributeError: 'State' object has no attribute 'fan_timer'
 Append to `aiomodernforms/const.py` (after the `INFO_DATE_CODE` line added in Task 3):
 
 ```python
-
 STATE_FAN_TIMER = "fanTimer"
 STATE_LIGHT_TIMER = "lightTimer"
 ```
@@ -669,9 +664,9 @@ This requires `Optional` in `models.py`'s `typing` import — already added in T
 Add a method to the `Device` class (after `has_wind`, currently lines 128-130):
 
 ```python
-    def has_relative_timers(self) -> bool:
-        """See if the Fan uses relative (seconds-until-off) sleep timers."""
-        return self.state.fan_timer is not None or self.state.light_timer is not None
+def has_relative_timers(self) -> bool:
+    """See if the Fan uses relative (seconds-until-off) sleep timers."""
+    return self.state.fan_timer is not None or self.state.light_timer is not None
 ```
 
 - [ ] **Step 5: Add the public proxy in `aiomodernforms/modernforms.py`**
@@ -679,14 +674,14 @@ Add a method to the `Device` class (after `has_wind`, currently lines 128-130):
 Add, after `has_breeze_mode` (currently lines 206-213):
 
 ```python
-    def has_relative_timers(self):
-        """See if the Fan uses relative (seconds-until-off) sleep timers."""
-        if self._device is None:
-            raise ModernFormsNotInitializedError(
-                "The device has not been initialized.  "
-                + "Please run update on the device before getting state"
-            )
-        return self._device.has_relative_timers()
+def has_relative_timers(self):
+    """See if the Fan uses relative (seconds-until-off) sleep timers."""
+    if self._device is None:
+        raise ModernFormsNotInitializedError(
+            "The device has not been initialized.  "
+            + "Please run update on the device before getting state"
+        )
+    return self._device.has_relative_timers()
 ```
 
 - [ ] **Step 6: Run tests to verify they pass**
@@ -720,8 +715,8 @@ git commit -m "feat: detect Gen 3 relative sleep timers via has_relative_timers(
 Add to `tests/test_aiomodernforms.py`'s `.const` import block, alongside the other `STATE_*` imports:
 
 ```python
-    STATE_FAN_TIMER,
-    STATE_LIGHT_TIMER,
+STATE_FAN_TIMER,
+STATE_LIGHT_TIMER,
 ```
 
 (these constants already exist as of Task 4; this just imports them into the test file).
@@ -733,9 +728,7 @@ Add tests, after `test_fan_with_breeze_mode` (currently ending at line 344):
 async def test_light_sleep_relative_timer_int(aresponses):
     """Test that light sleep uses relative seconds on a Gen 3-style device."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
-    aresponses.add(
-        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
-    )
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
 
     async def evaluate_request(request):
         data = await request.json()
@@ -762,9 +755,7 @@ async def test_light_sleep_relative_timer_int(aresponses):
 async def test_fan_sleep_relative_timer_datetime(aresponses):
     """Test that fan sleep uses relative seconds on a Gen 3-style device."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
-    aresponses.add(
-        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
-    )
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
 
     async def evaluate_request(request):
         data = await request.json()
@@ -791,9 +782,7 @@ async def test_fan_sleep_relative_timer_datetime(aresponses):
 async def test_light_sleep_relative_timer_clear(aresponses):
     """Test that sleep=0 cancels the timer under relative-timer semantics too."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
-    aresponses.add(
-        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
-    )
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
 
     async def evaluate_request(request):
         data = await request.json()
@@ -824,7 +813,6 @@ Expected: FAIL with `AttributeError: module 'aiomodernforms' has no attribute 'C
 Append to `aiomodernforms/const.py` (after the `STATE_LIGHT_TIMER` line added in Task 4):
 
 ```python
-
 COMMAND_FAN_TIMER = "fanTimer"
 COMMAND_LIGHT_TIMER = "lightTimer"
 ```
@@ -869,35 +857,58 @@ from .const import (
 Add a new private method, immediately before `light()` (currently line 215):
 
 ```python
-    def _sleep_command(
-        self, epoch_command: str, relative_command: str, sleep: Union[int, datetime]
-    ) -> Dict[str, int]:
-        """Build the timer command for `sleep`.
+def _sleep_command(
+    self, epoch_command: str, relative_command: str, sleep: Union[int, datetime]
+) -> Dict[str, int]:
+    """Build the timer command for `sleep`.
 
-        Gen 1/2 fans store sleep timers as an epoch timestamp under
-        `epoch_command`. Gen 3 fans store them as seconds-until-off under
-        `relative_command`. Which one a given device uses is only knowable
-        after `update()` has populated `has_relative_timers()`; before that,
-        epoch semantics (the historical default) are used.
-        """
-        use_relative = self._device is not None and self._device.has_relative_timers()
-        command = relative_command if use_relative else epoch_command
+    Gen 1/2 fans store sleep timers as an epoch timestamp under
+    `epoch_command`. Gen 3 fans store them as seconds-until-off under
+    `relative_command`. Which one a given device uses is only knowable
+    after `update()` has populated `has_relative_timers()`; before that,
+    epoch semantics (the historical default) are used.
+    """
+    use_relative = self._device is not None and self._device.has_relative_timers()
+    command = relative_command if use_relative else epoch_command
 
-        if isinstance(sleep, int):
-            if sleep <= 0:
-                return {command: SLEEP_TIMER_CANCEL}
-            if use_relative:
-                return {command: sleep}
+    if isinstance(sleep, int):
+        if sleep <= 0:
+            return {command: SLEEP_TIMER_CANCEL}
+        if use_relative:
+            return {command: sleep}
+        sleep_till = datetime.now() + timedelta(seconds=sleep)
+        return {command: int(sleep_till.timestamp())}
+
+    if isinstance(sleep, datetime) and not (
+        sleep < datetime.now() or sleep > (datetime.now() + timedelta(hours=24))
+    ):
+        if use_relative:
+            return {command: int((sleep - datetime.now()).total_seconds())}
+        return {command: int(sleep.timestamp())}
+
+    raise ModernFormsInvalidSettingsError(
+        "The time to sleep till must be a datetime object that is not more"
+        + " then 24 hours into the future, or an interger for number of"
+        + " seconds to sleep. 0 cancels the sleep timer."
+    )
+```
+
+In `light()`, replace the existing `sleep` block:
+
+```python
+if sleep is not None:
+    if isinstance(sleep, int):
+        # turns off sleep timer
+        commands[COMMAND_LIGHT_SLEEP_TIMER] = SLEEP_TIMER_CANCEL
+        if sleep > 0:
+            # count as number of seconds to sleep
             sleep_till = datetime.now() + timedelta(seconds=sleep)
-            return {command: int(sleep_till.timestamp())}
-
-        if isinstance(sleep, datetime) and not (
-            sleep < datetime.now() or sleep > (datetime.now() + timedelta(hours=24))
-        ):
-            if use_relative:
-                return {command: int((sleep - datetime.now()).total_seconds())}
-            return {command: int(sleep.timestamp())}
-
+            commands[COMMAND_LIGHT_SLEEP_TIMER] = int(sleep_till.timestamp())
+    elif isinstance(sleep, datetime) and not (
+        sleep < datetime.now() or sleep > (datetime.now() + timedelta(hours=24))
+    ):
+        commands[COMMAND_LIGHT_SLEEP_TIMER] = int(sleep.timestamp())
+    else:
         raise ModernFormsInvalidSettingsError(
             "The time to sleep till must be a datetime object that is not more"
             + " then 24 hours into the future, or an interger for number of"
@@ -905,70 +916,45 @@ Add a new private method, immediately before `light()` (currently line 215):
         )
 ```
 
-In `light()`, replace the existing `sleep` block:
-
-```python
-        if sleep is not None:
-            if isinstance(sleep, int):
-                # turns off sleep timer
-                commands[COMMAND_LIGHT_SLEEP_TIMER] = SLEEP_TIMER_CANCEL
-                if sleep > 0:
-                    # count as number of seconds to sleep
-                    sleep_till = datetime.now() + timedelta(seconds=sleep)
-                    commands[COMMAND_LIGHT_SLEEP_TIMER] = int(sleep_till.timestamp())
-            elif isinstance(sleep, datetime) and not (
-                sleep < datetime.now() or sleep > (datetime.now() + timedelta(hours=24))
-            ):
-                commands[COMMAND_LIGHT_SLEEP_TIMER] = int(sleep.timestamp())
-            else:
-                raise ModernFormsInvalidSettingsError(
-                    "The time to sleep till must be a datetime object that is not more"
-                    + " then 24 hours into the future, or an interger for number of"
-                    + " seconds to sleep. 0 cancels the sleep timer."
-                )
-```
-
 with:
 
 ```python
-        if sleep is not None:
-            commands.update(
-                self._sleep_command(
-                    COMMAND_LIGHT_SLEEP_TIMER, COMMAND_LIGHT_TIMER, sleep
-                )
-            )
+if sleep is not None:
+    commands.update(
+        self._sleep_command(COMMAND_LIGHT_SLEEP_TIMER, COMMAND_LIGHT_TIMER, sleep)
+    )
 ```
 
 In `fan()`, replace the equivalent `sleep` block:
 
 ```python
-        if sleep is not None:
-            if isinstance(sleep, int):
-                # turns off sleep timer
-                commands[COMMAND_FAN_SLEEP_TIMER] = SLEEP_TIMER_CANCEL
-                if sleep > 0:
-                    # count as number of seconds to sleep
-                    sleep_till = datetime.now() + timedelta(seconds=sleep)
-                    commands[COMMAND_FAN_SLEEP_TIMER] = int(sleep_till.timestamp())
-            elif isinstance(sleep, datetime) and not (
-                sleep < datetime.now() or sleep > (datetime.now() + timedelta(hours=24))
-            ):
-                commands[COMMAND_FAN_SLEEP_TIMER] = int(sleep.timestamp())
-            else:
-                raise ModernFormsInvalidSettingsError(
-                    "The time to sleep till must be a datetime object that is not more"
-                    + " then 24 hours into the future, or an interger for number of"
-                    + " seconds to sleep. 0 cancels the sleep timer."
-                )
+if sleep is not None:
+    if isinstance(sleep, int):
+        # turns off sleep timer
+        commands[COMMAND_FAN_SLEEP_TIMER] = SLEEP_TIMER_CANCEL
+        if sleep > 0:
+            # count as number of seconds to sleep
+            sleep_till = datetime.now() + timedelta(seconds=sleep)
+            commands[COMMAND_FAN_SLEEP_TIMER] = int(sleep_till.timestamp())
+    elif isinstance(sleep, datetime) and not (
+        sleep < datetime.now() or sleep > (datetime.now() + timedelta(hours=24))
+    ):
+        commands[COMMAND_FAN_SLEEP_TIMER] = int(sleep.timestamp())
+    else:
+        raise ModernFormsInvalidSettingsError(
+            "The time to sleep till must be a datetime object that is not more"
+            + " then 24 hours into the future, or an interger for number of"
+            + " seconds to sleep. 0 cancels the sleep timer."
+        )
 ```
 
 with:
 
 ```python
-        if sleep is not None:
-            commands.update(
-                self._sleep_command(COMMAND_FAN_SLEEP_TIMER, COMMAND_FAN_TIMER, sleep)
-            )
+if sleep is not None:
+    commands.update(
+        self._sleep_command(COMMAND_FAN_SLEEP_TIMER, COMMAND_FAN_TIMER, sleep)
+    )
 ```
 
 - [ ] **Step 5: Export the new constants in `aiomodernforms/__init__.py`**
@@ -1044,8 +1030,8 @@ git commit -m "feat: send Gen 3 relative sleep timers (fanTimer/lightTimer) when
 Add to `tests/test_aiomodernforms.py`'s `.const` import block:
 
 ```python
-    STATE_RF_PAIR_MODE_ACTIVE,
-    STATE_SCHEDULE,
+STATE_RF_PAIR_MODE_ACTIVE,
+STATE_SCHEDULE,
 ```
 
 Add tests, after `test_adaptive_learning` (currently ending at line 502, now shifted later by earlier tasks — insert in the same logical spot, right before `test_invalid_setting`):
@@ -1165,7 +1151,6 @@ Expected: FAIL with `AttributeError: 'ModernFormsDevice' object has no attribute
 Append to `aiomodernforms/const.py` (after the `COMMAND_LIGHT_TIMER` line added in Task 5):
 
 ```python
-
 COMMAND_RF_PAIR_MODE = "rfPairModeActive"
 COMMAND_RESET_RF_PAIR_LIST = "resetRfPairList"
 COMMAND_FACTORY_RESET = "factoryReset"
@@ -1218,37 +1203,41 @@ from .const import (
 Add the new methods, after `adaptive_learning` and before `reboot`:
 
 ```python
-    async def enable_pairing_mode(self, active: bool = True):
-        """Toggle RF pairing mode, used to pair remotes or wall controls."""
-        await self.request(commands={COMMAND_RF_PAIR_MODE: active})
+async def enable_pairing_mode(self, active: bool = True):
+    """Toggle RF pairing mode, used to pair remotes or wall controls."""
+    await self.request(commands={COMMAND_RF_PAIR_MODE: active})
 
-    async def clear_paired_devices(self):
-        """Clear all RF-paired devices (remotes, wall controls) from the fan."""
-        await self.request(commands={COMMAND_RESET_RF_PAIR_LIST: True})
 
-    async def factory_reset(self):
-        """Factory reset the fan.
+async def clear_paired_devices(self):
+    """Clear all RF-paired devices (remotes, wall controls) from the fan."""
+    await self.request(commands={COMMAND_RESET_RF_PAIR_LIST: True})
 
-        Clears Wi-Fi credentials, decommissions the fan from the cloud,
-        clears RF pairings, and returns the fan to AP mode.
-        """
-        try:
-            await self.request(commands={COMMAND_FACTORY_RESET: True})
-        except ModernFormsConnectionTimeoutError:
-            # a successful factory reset drops the connection
-            pass
 
-    async def decommission(self):
-        """Decommission the fan from the cloud and return it to AP mode."""
-        try:
-            await self.request(commands={COMMAND_DECOMMISSION: True})
-        except ModernFormsConnectionTimeoutError:
-            # a successful decommission drops the connection
-            pass
+async def factory_reset(self):
+    """Factory reset the fan.
 
-    async def set_schedule(self, data: str):
-        """Set the fan's base64-encoded schedule blob."""
-        await self.request(commands={COMMAND_SCHEDULE: data})
+    Clears Wi-Fi credentials, decommissions the fan from the cloud,
+    clears RF pairings, and returns the fan to AP mode.
+    """
+    try:
+        await self.request(commands={COMMAND_FACTORY_RESET: True})
+    except ModernFormsConnectionTimeoutError:
+        # a successful factory reset drops the connection
+        pass
+
+
+async def decommission(self):
+    """Decommission the fan from the cloud and return it to AP mode."""
+    try:
+        await self.request(commands={COMMAND_DECOMMISSION: True})
+    except ModernFormsConnectionTimeoutError:
+        # a successful decommission drops the connection
+        pass
+
+
+async def set_schedule(self, data: str):
+    """Set the fan's base64-encoded schedule blob."""
+    await self.request(commands={COMMAND_SCHEDULE: data})
 ```
 
 - [ ] **Step 5: Export the new constants in `aiomodernforms/__init__.py`**
@@ -1316,9 +1305,7 @@ Add tests, after `test_gen1_2_info_defaults`:
 @pytest.mark.asyncio
 async def test_config_gen1_2(aresponses):
     """Test config() against a Gen 1/2-shaped /config-read response."""
-    aresponses.add(
-        "fan.local", "/config-read", "POST", response=gen1_2_config_response
-    )
+    aresponses.add("fan.local", "/config-read", "POST", response=gen1_2_config_response)
 
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
         config = await device.config()
@@ -1326,16 +1313,16 @@ async def test_config_gen1_2(aresponses):
         assert config.protocol == "com.modernforms.fan"
         assert config.hardware_revision == "WAC_WINDERMIER_REV_5"
         assert config.firmware_version == "01.03.0021"
-        assert config.certificate_id.startswith("6v6amxh5vbb2qjnkrp2av8i8r1tk1svzwn4ktrr")
+        assert config.certificate_id.startswith(
+            "6v6amxh5vbb2qjnkrp2av8i8r1tk1svzwn4ktrr"
+        )
         assert config.wifi_strength == "100"
 
 
 @pytest.mark.asyncio
 async def test_config_gen3(aresponses):
     """Test config() against a Gen 3-shaped /config-read response."""
-    aresponses.add(
-        "fan.local", "/config-read", "POST", response=gen3_config_response
-    )
+    aresponses.add("fan.local", "/config-read", "POST", response=gen3_config_response)
 
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
         config = await device.config()
@@ -1352,9 +1339,7 @@ async def test_config_uses_config_read_path(aresponses):
     """Test that regular /mf traffic (update()) is unaffected by config()."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
-    aresponses.add(
-        "fan.local", "/config-read", "POST", response=gen3_config_response
-    )
+    aresponses.add("fan.local", "/config-read", "POST", response=gen3_config_response)
 
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
         await device.update()
@@ -1373,7 +1358,6 @@ Expected: FAIL with `AttributeError: 'ModernFormsDevice' object has no attribute
 Append to `aiomodernforms/const.py` (after the `COMMAND_SCHEDULE` line added in Task 6):
 
 ```python
-
 CONFIG_READ_API_ENDPOINT = "config-read"
 
 CONFIG_NAME_LEGACY = "N"
@@ -1535,33 +1519,33 @@ from .const import (
 In `__init__`, remove the line that bakes the `mf` endpoint into `self._base_path`:
 
 ```python
-        if self._base_path[-1] != "/":
-            self._base_path += "/"
+if self._base_path[-1] != "/":
+    self._base_path += "/"
 
-        self._base_path += DEFAULT_API_ENDPOINT
+self._base_path += DEFAULT_API_ENDPOINT
 ```
 
 becomes:
 
 ```python
-        if self._base_path[-1] != "/":
-            self._base_path += "/"
+if self._base_path[-1] != "/":
+    self._base_path += "/"
 ```
 
 In `_request`, add a `path` parameter and use it in the URL:
 
 ```python
-    async def _request(
-        self, commands: Optional[dict] = None, path: str = DEFAULT_API_ENDPOINT
-    ) -> Any:
-        """Handle a request to a Modern Forms Fan device."""
-        scheme = "https" if self._tls else "http"
-        url = URL.build(
-            scheme=scheme,
-            host=self._host,
-            port=self._port,
-            path=self._base_path + path,
-        )
+async def _request(
+    self, commands: Optional[dict] = None, path: str = DEFAULT_API_ENDPOINT
+) -> Any:
+    """Handle a request to a Modern Forms Fan device."""
+    scheme = "https" if self._tls else "http"
+    url = URL.build(
+        scheme=scheme,
+        host=self._host,
+        port=self._port,
+        path=self._base_path + path,
+    )
 ```
 
 (the rest of `_request` is unchanged).
@@ -1569,11 +1553,11 @@ In `_request`, add a `path` parameter and use it in the URL:
 Add `config()`, after the `info` property and before `has_breeze_mode`:
 
 ```python
-    async def config(self) -> ConfigInfo:
-        """Retrieve config-read data: hardware revision, RF library version,
-        certificate ID, and current Wi-Fi signal strength."""
-        config_data = await self._request(commands={}, path=CONFIG_READ_API_ENDPOINT)
-        return ConfigInfo.from_dict(config_data)
+async def config(self) -> ConfigInfo:
+    """Retrieve config-read data: hardware revision, RF library version,
+    certificate ID, and current Wi-Fi signal strength."""
+    config_data = await self._request(commands={}, path=CONFIG_READ_API_ENDPOINT)
+    return ConfigInfo.from_dict(config_data)
 ```
 
 - [ ] **Step 6: Run tests to verify they pass**

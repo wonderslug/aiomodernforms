@@ -204,9 +204,7 @@ async def test_gen1_2_info_defaults(aresponses):
 @pytest.mark.asyncio
 async def test_config_gen1_2(aresponses):
     """Test config() against a Gen 1/2-shaped /config-read response."""
-    aresponses.add(
-        "fan.local", "/config-read", "POST", response=gen1_2_config_response
-    )
+    aresponses.add("fan.local", "/config-read", "POST", response=gen1_2_config_response)
 
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
         config = await device.config()
@@ -221,9 +219,7 @@ async def test_config_gen1_2(aresponses):
 @pytest.mark.asyncio
 async def test_config_gen3(aresponses):
     """Test config() against a Gen 3-shaped /config-read response."""
-    aresponses.add(
-        "fan.local", "/config-read", "POST", response=gen3_config_response
-    )
+    aresponses.add("fan.local", "/config-read", "POST", response=gen3_config_response)
 
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
         config = await device.config()
@@ -240,9 +236,7 @@ async def test_config_uses_config_read_path(aresponses):
     """Test that regular /mf traffic (update()) is unaffected by config()."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
     aresponses.add("fan.local", "/mf", "POST", response=basic_response)
-    aresponses.add(
-        "fan.local", "/config-read", "POST", response=gen3_config_response
-    )
+    aresponses.add("fan.local", "/config-read", "POST", response=gen3_config_response)
 
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
         await device.update()
@@ -534,9 +528,7 @@ async def test_nonupdated_device_for_breeze_mode():
 async def test_has_relative_timers_true_for_gen3(aresponses):
     """Test that a Gen 3-style response (fanTimer/lightTimer) is detected."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
-    aresponses.add(
-        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
-    )
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
 
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
         await device.update()
@@ -570,9 +562,7 @@ async def test_nonupdated_device_for_relative_timers():
 async def test_light_sleep_relative_timer_int(aresponses):
     """Test that light sleep uses relative seconds on a Gen 3-style device."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
-    aresponses.add(
-        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
-    )
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
 
     async def evaluate_request(request):
         data = await request.json()
@@ -599,9 +589,7 @@ async def test_light_sleep_relative_timer_int(aresponses):
 async def test_fan_sleep_relative_timer_datetime(aresponses):
     """Test that fan sleep uses relative seconds on a Gen 3-style device."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
-    aresponses.add(
-        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
-    )
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
 
     async def evaluate_request(request):
         data = await request.json()
@@ -628,9 +616,7 @@ async def test_fan_sleep_relative_timer_datetime(aresponses):
 async def test_light_sleep_relative_timer_clear(aresponses):
     """Test that sleep=0 cancels the timer under relative-timer semantics too."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
-    aresponses.add(
-        "fan.local", "/mf", "POST", response=gen3_relative_timer_response
-    )
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
 
     async def evaluate_request(request):
         data = await request.json()
