@@ -6,12 +6,12 @@ repos:
       - id: black
         args: [--safe, --quiet, --target-version, py311]
   - repo: https://github.com/adamchainz/blacken-docs
-    rev: 1.14.0
+    rev: 1.20.0
     hooks:
       - id: blacken-docs
         additional_dependencies: [black==26.5.1]
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.2.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -21,45 +21,50 @@ repos:
       - id: check-json
       - id: check-yaml
       - id: requirements-txt-fixer
-      - id: check-byte-order-marker
+      # check-byte-order-marker was removed upstream in pre-commit-hooks
+      # v4.x+ (id kept only as a stub that always fails); fix-byte-order-marker
+      # is the maintained replacement with equivalent behavior.
+      - id: fix-byte-order-marker
       - id: check-case-conflict
-      - id: fix-encoding-pragma
-        args: ["--remove"]
+      # fix-encoding-pragma was removed upstream in pre-commit-hooks v4.x+
+      # (id kept only as a stub that always fails); pyupgrade --py311-plus
+      # (already configured below) removes encoding pragmas, making this
+      # hook redundant as well as non-functional.
       - id: check-ast
       - id: detect-private-key
       - id: forbid-new-submodules
   - repo: https://github.com/pre-commit/pre-commit
-    rev: v2.7.0
+    rev: v4.6.1
     hooks:
       - id: validate_manifest
   - repo: https://github.com/pre-commit/mirrors-autopep8
-    rev: v1.5.4
+    rev: v2.0.4
     hooks:
       - id: autopep8
   - repo: https://github.com/PyCQA/isort
-    rev: 5.12.0
+    rev: 8.0.1
     hooks:
       - id: isort
   - repo: https://github.com/pycqa/pylint
-    rev: v2.15.10
+    rev: v4.0.6
     hooks:
       - id: pylint
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.4.1
+    rev: v2.3.0
     hooks:
       - id: mypy
   - repo: https://github.com/pycqa/flake8
-    rev: 3.8.3
+    rev: 7.3.0
     hooks:
       - id: flake8
         additional_dependencies: ["flake8-docstrings"]
   - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.24.2
+    rev: v1.38.0
     hooks:
       - id: yamllint
   - repo: https://github.com/asottile/pyupgrade
-    rev: v2.7.2
+    rev: v3.21.2
     hooks:
       - id: pyupgrade
-        args: [--py36-plus]
+        args: [--py311-plus]
 exclude: '^.github/.*'

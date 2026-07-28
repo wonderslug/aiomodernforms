@@ -6,7 +6,7 @@ import asyncio
 import json
 import socket
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import aiohttp
 import backoff  # type: ignore
@@ -63,7 +63,7 @@ from .models import ConfigInfo, Device
 class ModernFormsDevice:
     """Modern Forms device reppresentation."""
 
-    _device: Optional[Device] = None
+    _device: Device | None = None
 
     def __init__(
         self,
@@ -119,7 +119,7 @@ class ModernFormsDevice:
         backoff.expo, ModernFormsConnectionError, max_tries=3, logger=None
     )
     async def _request(
-        self, commands: Optional[dict] = None, path: str = DEFAULT_API_ENDPOINT
+        self, commands: dict | None = None, path: str = DEFAULT_API_ENDPOINT
     ) -> Any:
         """Handle a request to a Modern Forms Fan device."""
         scheme = "https" if self._tls else "http"
@@ -157,7 +157,7 @@ class ModernFormsDevice:
                     headers=headers,
                     ssl=self._verify_ssl,
                 )
-        except asyncio.TimeoutError as exception:
+        except TimeoutError as exception:
             raise ModernFormsConnectionTimeoutError(
                 "Timeout occurred while connecting to Modern Forms device at"
                 + f" {self._host}"
@@ -184,7 +184,7 @@ class ModernFormsDevice:
         data = await response.json()
         return data
 
-    async def request(self, commands: Optional[dict] = None):
+    async def request(self, commands: dict | None = None):
         """Issue one or more commands to the Modern Forms fan."""
         if self._device is None:
             await self.update()
@@ -240,8 +240,8 @@ class ModernFormsDevice:
         return self._device.has_relative_timers()
 
     def _sleep_command(
-        self, epoch_command: str, relative_command: str, sleep: Union[int, datetime]
-    ) -> Dict[str, int]:
+        self, epoch_command: str, relative_command: str, sleep: int | datetime
+    ) -> dict[str, int]:
         """Build the timer command for `sleep`.
 
         Gen 1/2 fans store sleep timers as an epoch timestamp under
@@ -277,14 +277,14 @@ class ModernFormsDevice:
     async def light(
         self,
         *,
-        brightness: Optional[int] = None,
-        on: Optional[bool] = None,
-        sleep: Optional[Union[int, datetime]] = None,
+        brightness: int | None = None,
+        on: bool | None = None,
+        sleep: int | datetime | None = None,
     ):
         """Change Fans Light state."""
         if self._device is None:
             await self.update()
-        commands: Dict[str, Union[bool, int]] = {}
+        commands: dict[str, bool | int] = {}
 
         if brightness is not None:
             if (
@@ -317,17 +317,17 @@ class ModernFormsDevice:
     async def fan(
         self,
         *,
-        on: Optional[bool] = None,
-        sleep: Optional[Union[int, datetime]] = None,
-        speed: Optional[int] = None,
-        direction: Optional[str] = None,
-        wind: Optional[bool] = None,
-        wind_speed: Optional[int] = None,
+        on: bool | None = None,
+        sleep: int | datetime | None = None,
+        speed: int | None = None,
+        direction: str | None = None,
+        wind: bool | None = None,
+        wind_speed: int | None = None,
     ):
         """Change Fans Fan state."""
         if self._device is None:
             await self.update()
-        commands: Dict[str, Union[bool, int, str]] = {}
+        commands: dict[str, bool | int | str] = {}
 
         if speed is not None:
             if (
