@@ -4,7 +4,7 @@
 
 **Goal:** Close all 10 open Dependabot alerts (pip, black, wheel, pytest) and refresh every other stale dev-tool pin in `.pre-commit-config.yaml`/`requirements_test.txt`, without touching runtime dependencies.
 
-**Architecture:** Two staged commits on this branch. Stage 1 bumps only the four Dependabot-flagged packages plus pytest's two companion packages (pytest-asyncio, pytest-cov) needed for compatibility, and syncs black's rev in `.pre-commit-config.yaml`. Stage 2 bumps every remaining stale dev-tool pin (isort, flake8, pylint, mypy, autopep8, pyupgrade, coverage, pre-commit, twine, blacken-docs, yamllint) and fixes any lint/type fallout those bumps surface, as its own diff.
+**Architecture:** Two staged commits on this branch. Stage 1 bumps the four Dependabot-flagged packages plus pytest's companion packages (pytest-asyncio, pytest-cov) and `coverage` (a hard install-time dependency of pytest-cov 7.x) needed for compatibility, and syncs black's rev in `.pre-commit-config.yaml`. Stage 2 bumps every remaining stale dev-tool pin (isort, flake8, pylint, mypy, autopep8, pyupgrade, pre-commit, twine, blacken-docs, yamllint) and fixes any lint/type fallout those bumps surface, as its own diff.
 
 **Tech Stack:** Python 3.11 (existing `.venv` at repo root, itself Python 3.11.15), pip, pre-commit, pytest.
 
@@ -16,6 +16,7 @@
 - Every version bump must land at or above the spec's target version (see spec's Version Targets tables) — never below the security-patched floor.
 - `setup.py` already declares `python_requires=">=3.11"`; black's `--target-version` and pyupgrade's `--py*-plus` arg must match (`py311`).
 - **Deviation from spec:** the spec listed `autopep8` target as `2.3.2` (latest PyPI release). The `pre-commit/mirrors-autopep8` hook repo that mirrors it has not been tagged past `v2.0.4` (confirmed via `git ls-remote --tags`), so the pre-commit hook cannot go higher than that. This plan pins `autopep8==2.0.4` in `requirements_dev.txt` (matching the mirror) instead of `2.3.2`, to keep the two files in sync. This is still a large jump up from the current `1.6.0` and is not a Dependabot-flagged package.
+- **Deviation from spec (discovered during Task 1 execution):** `pytest-cov==7.1.0` requires `coverage[toml]>=7.10.6` (confirmed via PyPI metadata: `pytest-cov` 6.x needs `coverage>=7.5`, 7.x needs `coverage>=7.10.6`). The original spec/plan left `coverage==7.2.7` pinned until Task 2, which makes Task 1's own `pip install` unresolvable. `coverage` is not Dependabot-flagged, but it is a hard install-time dependency of `pytest-cov`, exactly like `pytest-asyncio` is of `pytest` — so its bump to `7.15.2` moves into Task 1, not Task 2. Task 2's file contents are unaffected (it already targeted `coverage==7.15.2`); only the task boundary moved.
 
 ---
 
@@ -51,7 +52,7 @@ Replace the full file contents with:
 
 ```
 aresponses==3.0.0
-coverage==7.2.7
+coverage==7.15.2
 flake8==4.0.1
 flake8-docstrings==1.6.0
 isort==5.11.5
@@ -62,7 +63,7 @@ pytest-asyncio==1.4.0
 pytest-cov==7.1.0
 ```
 
-(Only `pytest`, `pytest-asyncio`, `pytest-cov` change in this step; the rest stay as-is until Task 2.)
+(`pytest`, `pytest-asyncio`, `pytest-cov` change in this step because they're the Dependabot-flagged/companion bump. `coverage` also changes here — earlier than the rest of the Stage 2 refresh — because `pytest-cov==7.1.0` requires `coverage[toml]>=7.10.6`; the old `coverage==7.2.7` pin makes this file's own `pip install` unresolvable otherwise. Everything else in this file stays as-is until Task 2.)
 
 - [ ] **Step 3: Update `.pre-commit-config.yaml`**
 
@@ -177,7 +178,8 @@ git commit -m "Bump pip, black, wheel, pytest to close Dependabot alerts
 Closes all pip (path traversal, command injection, tar/zip
 confusion), black (arbitrary file write), and wheel (ReDoS) alerts,
 plus the pytest tmpdir-handling alert. pytest-asyncio/pytest-cov are
-bumped alongside pytest for compatibility."
+bumped alongside pytest for compatibility; coverage is bumped too
+since pytest-cov 7.x requires coverage>=7.10.6."
 ```
 
 ---
@@ -222,6 +224,8 @@ pytest==9.1.1
 pytest-asyncio==1.4.0
 pytest-cov==7.1.0
 ```
+
+(`coverage` is already at `7.15.2` from Task 1 — no change to that line here. Everything else in this file changes in this step.)
 
 - [ ] **Step 3: Update `.pre-commit-config.yaml`**
 
@@ -303,7 +307,7 @@ Run:
 ```bash
 .venv/bin/pip install -r requirements_dev.txt -r requirements_test.txt -r requirements.txt
 ```
-Expected: pip installs/upgrades `isort`, `flake8`, `flake8-docstrings`, `pylint`, `mypy`, `autopep8`, `coverage`, `pre-commit`, `twine`, `blacken-docs`, `yamllint` with no errors.
+Expected: pip installs/upgrades `isort`, `flake8`, `flake8-docstrings`, `pylint`, `mypy`, `autopep8`, `pre-commit`, `twine`, `blacken-docs`, `yamllint` with no errors (`coverage` was already bumped in Task 1).
 
 - [ ] **Step 5: Run pre-commit across all files and resolve fallout**
 
@@ -337,7 +341,7 @@ Expected: all tests still pass (this stage doesn't touch pytest itself, but `cov
 
 ```bash
 git add requirements_dev.txt requirements_test.txt .pre-commit-config.yaml aiomodernforms tests
-git commit -m "Refresh remaining dev-tooling pins (isort, flake8, pylint, mypy, autopep8, pyupgrade, coverage, pre-commit, twine, blacken-docs, yamllint)
+git commit -m "Refresh remaining dev-tooling pins (isort, flake8, pylint, mypy, autopep8, pyupgrade, pre-commit, twine, blacken-docs, yamllint)
 
 Brings the rest of the dev/lint toolchain up to current releases so
 requirements_test.txt and .pre-commit-config.yaml stop drifting apart.
