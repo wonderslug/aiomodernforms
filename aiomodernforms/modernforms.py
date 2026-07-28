@@ -281,36 +281,48 @@ class ModernFormsDevice:
         on: bool | None = None,
         sleep: int | datetime | None = None,
     ):
-        """Change Fans Light state."""
+        """Change Fans Light state.
+
+        When both brightness and on=True are given, brightness is sent in
+        its own request first to avoid the fan briefly flashing at the
+        previous brightness. See issue #99.
+        """
         if self._device is None:
             await self.update()
-        commands: dict[str, bool | int] = {}
 
-        if brightness is not None:
-            if (
-                not isinstance(brightness, int)
-                or int(brightness) < LIGHT_BRIGHTNESS_LOW_VALUE
-                or int(brightness) > LIGHT_BRIGHTNESS_HIGH_VALUE
-            ):
-                raise ModernFormsInvalidSettingsError(
-                    "brightness value must be between"
-                    + f" {LIGHT_BRIGHTNESS_LOW_VALUE} and {LIGHT_BRIGHTNESS_HIGH_VALUE}"
-                )
-
-            commands[COMMAND_LIGHT_BRIGHTNESS] = brightness
-
-        if on is not None:
-            if not isinstance(on, bool):
-                raise ModernFormsInvalidSettingsError("on must be a boolean")
-
-            commands[COMMAND_LIGHT_POWER] = on
-
-        if sleep is not None:
-            commands.update(
-                self._sleep_command(
-                    COMMAND_LIGHT_SLEEP_TIMER, COMMAND_LIGHT_TIMER, sleep
-                )
+        if brightness is not None and (
+            not isinstance(brightness, int)
+            or int(brightness) < LIGHT_BRIGHTNESS_LOW_VALUE
+            or int(brightness) > LIGHT_BRIGHTNESS_HIGH_VALUE
+        ):
+            raise ModernFormsInvalidSettingsError(
+                "brightness value must be between"
+                + f" {LIGHT_BRIGHTNESS_LOW_VALUE} and {LIGHT_BRIGHTNESS_HIGH_VALUE}"
             )
+
+        if on is not None and not isinstance(on, bool):
+            raise ModernFormsInvalidSettingsError("on must be a boolean")
+
+        sleep_commands: dict[str, int] = {}
+        if sleep is not None:
+            sleep_commands = self._sleep_command(
+                COMMAND_LIGHT_SLEEP_TIMER, COMMAND_LIGHT_TIMER, sleep
+            )
+
+        if brightness is not None and on is True:
+            # Setting brightness and turning on in a single request makes the
+            # fan briefly show the previous brightness before jumping to the
+            # new one. Sending brightness first avoids the flash.
+            await self.request(commands={COMMAND_LIGHT_BRIGHTNESS: brightness})
+            await self.request(commands={COMMAND_LIGHT_POWER: on, **sleep_commands})
+            return
+
+        commands: dict[str, bool | int] = {}
+        if brightness is not None:
+            commands[COMMAND_LIGHT_BRIGHTNESS] = brightness
+        if on is not None:
+            commands[COMMAND_LIGHT_POWER] = on
+        commands.update(sleep_commands)
 
         await self.request(commands=commands)
 
