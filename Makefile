@@ -36,20 +36,28 @@ lint: lint-black lint-flake8 lint-pylint lint-mypy ## Run all linters.
 
 .PHONY: lint-black
 lint-black: ## Run linting using black & blacken-docs.
-	black --safe --target-version py36 aiomodernforms tests examples; \
+	black --safe --target-version py36 aiomodernforms tests examples diagnose.py; \
 	blacken-docs --target-version py36
 
 .PHONY: lint-flake8
 lint-flake8: ## Run linting using flake8 (pycodestyle/pydocstyle).
-	flake8 aiomodernforms examples tests
+	flake8 aiomodernforms examples tests diagnose.py
 
 .PHONY: lint-pylint
 lint-pylint: ## Run linting using PyLint.
-	pylint aiomodernforms examples tests
+	pylint aiomodernforms examples tests diagnose.py
 
 .PHONY: lint-mypy
 lint-mypy: ## Run linting using MyPy.
 	mypy -p aiomodernforms
+
+.PHONY: diagnose
+diagnose: ## Print a redacted fan compatibility report (usage: make diagnose HOST=<ip>).
+	@if [ -z "$(HOST)" ]; then \
+		echo "Usage: make diagnose HOST=<fan-ip-address>"; \
+		exit 1; \
+	fi
+	python diagnose.py $(HOST)
 
 .PHONY: test
 test: ## Run tests quickly with the default Python.
