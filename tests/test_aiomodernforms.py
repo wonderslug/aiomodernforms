@@ -360,9 +360,9 @@ async def test_light(aresponses):
         assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER in data
         assert aiomodernforms.COMMAND_LIGHT_BRIGHTNESS not in data
         modified_response = basic_response.copy()
-        modified_response[
-            STATE_LIGHT_BRIGHTNESS
-        ] = aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
+        modified_response[STATE_LIGHT_BRIGHTNESS] = (
+            aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
+        )
         modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
         modified_response[STATE_LIGHT_SLEEP_TIMER] = data[
             aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER
@@ -480,6 +480,58 @@ async def test_light_on_only_single_request(aresponses):
         await device.update()
         await device.light(on=aiomodernforms.LIGHT_POWER_ON)
         assert device.status.light_on == aiomodernforms.LIGHT_POWER_ON
+
+
+@pytest.mark.asyncio
+async def test_light_on_with_brightness_no_sleep(aresponses):
+    """Test that turning on with brightness but no sleep still splits requests."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_brightness_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_BRIGHTNESS in data
+        assert aiomodernforms.COMMAND_LIGHT_POWER not in data
+        assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER not in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_LIGHT_BRIGHTNESS] = data[
+            aiomodernforms.COMMAND_LIGHT_BRIGHTNESS
+        ]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    async def evaluate_on_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_POWER in data
+        assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER not in data
+        assert aiomodernforms.COMMAND_LIGHT_BRIGHTNESS not in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_LIGHT_BRIGHTNESS] = (
+            aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
+        )
+        modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_brightness_request)
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_on_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(
+            on=aiomodernforms.LIGHT_POWER_ON,
+            brightness=aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE,
+        )
+        assert device.status.light_on == aiomodernforms.LIGHT_POWER_ON
+        assert (
+            device.status.light_brightness == aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
+        )
 
 
 @pytest.mark.asyncio

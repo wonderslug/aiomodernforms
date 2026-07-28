@@ -281,7 +281,12 @@ class ModernFormsDevice:
         on: bool | None = None,
         sleep: int | datetime | None = None,
     ):
-        """Change Fans Light state."""
+        """Change Fans Light state.
+
+        When both brightness and on=True are given, brightness is sent in
+        its own request first to avoid the fan briefly flashing at the
+        previous brightness. See issue #99.
+        """
         if self._device is None:
             await self.update()
 
