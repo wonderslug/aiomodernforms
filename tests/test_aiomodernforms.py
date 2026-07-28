@@ -175,6 +175,20 @@ real_gen1_2_config_response = {
     "MQTTShadowCnt": 125,
 }
 
+# Observed on real Gen 2 hardware (see GitHub issue #272): uses "wifiSignal"
+# instead of either the documented "Wi-Fi strength" or the "WiFi" fallback.
+real_gen2_wifi_signal_config_response = {
+    "BSSID": "0xREDACTED",
+    "SSID": "REDACTED",
+    "Name": "REDACTED",
+    "Protocol": "com.modernforms.fan",
+    "Firmware Rev": "02.00.0043",
+    "RF Rev": "v4.0.4-dirty",
+    "certificateId": "REDACTED",
+    "timezone": "PST8PDT",
+    "wifiSignal": "-62",
+}
+
 
 @pytest.mark.asyncio
 async def test_basic_status(aresponses):
@@ -263,6 +277,23 @@ async def test_config_real_gen1_2_wifi_key(aresponses):
         assert config.device_name == "WAC Windermier Fan(860E84)"
         assert config.hardware_revision == "WAC_WINDERMIER_REV_5"
         assert config.wifi_strength == "100"
+
+
+@pytest.mark.asyncio
+async def test_config_real_gen2_wifi_signal_key(aresponses):
+    """Test wifi_strength falls back to "wifiSignal", seen on real Gen 2 hardware."""
+    aresponses.add(
+        "fan.local",
+        "/config-read",
+        "POST",
+        response=real_gen2_wifi_signal_config_response,
+    )
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        config = await device.config()
+        assert config.protocol == "com.modernforms.fan"
+        assert config.firmware_version == "02.00.0043"
+        assert config.wifi_strength == "-62"
 
 
 @pytest.mark.asyncio

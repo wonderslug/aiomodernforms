@@ -18,6 +18,7 @@ from .const import (
     CONFIG_RF_VERSION_LEGACY,
     CONFIG_WIFI_STRENGTH,
     CONFIG_WIFI_STRENGTH_ALT,
+    CONFIG_WIFI_STRENGTH_ALT2,
     DEFAULT_WIND_SPEED,
     INFO_BRAND,
     INFO_CLIENT_ID,
@@ -107,8 +108,8 @@ class ConfigInfo:
     the device returned: Gen 1/2 fans report it as a percentage, Gen 3
     fans report it as a dBm value — callers must interpret it themselves.
     Real Gen 1/2 firmware has been observed sending this under the
-    undocumented key "WiFi" rather than the vendor doc's "Wi-Fi strength";
-    both are checked.
+    undocumented key "WiFi" or "wifiSignal" rather than the vendor doc's
+    "Wi-Fi strength"; all three are checked.
     """
 
     device_name: str
@@ -134,7 +135,13 @@ class ConfigInfo:
             ),
             certificate_id=data.get(CONFIG_CERTIFICATE_ID, ""),
             wifi_strength=str(
-                data.get(CONFIG_WIFI_STRENGTH, data.get(CONFIG_WIFI_STRENGTH_ALT, ""))
+                data.get(
+                    CONFIG_WIFI_STRENGTH,
+                    data.get(
+                        CONFIG_WIFI_STRENGTH_ALT,
+                        data.get(CONFIG_WIFI_STRENGTH_ALT2, ""),
+                    ),
+                )
             ),
         )
 
