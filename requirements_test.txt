@@ -1,10 +1,10 @@
 aresponses==3.0.0
-coverage==7.2.7
+coverage==7.15.2
 flake8==4.0.1
 flake8-docstrings==1.6.0
 isort==5.11.5
 mypy==1.4.1
 pylint==2.15.10
-pytest==7.4.0
-pytest-asyncio==0.21.0
-pytest-cov==4.1.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0

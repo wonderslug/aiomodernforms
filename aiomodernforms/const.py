@@ -1,4 +1,5 @@
 """Modern Forms Constants."""
+
 DEFAULT_TIMEOUT_SECS = 5
 DEFAULT_PORT = 80
 DEFAULT_API_ENDPOINT = "mf"

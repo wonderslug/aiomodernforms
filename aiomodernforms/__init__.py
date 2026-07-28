@@ -1,4 +1,5 @@
 """Asynchronous Python client for Modern Forms fans."""
+
 from .const import (  # noqa
     ADAPTIVE_LEARNING_OFF,
     ADAPTIVE_LEARNING_ON,

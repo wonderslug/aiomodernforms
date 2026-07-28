@@ -1,4 +1,5 @@
 """Models for Async IO Modern Forms."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

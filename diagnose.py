@@ -25,6 +25,7 @@ Usage:
     python diagnose.py 192.168.1.85 --active > report.md
     python diagnose.py 192.168.1.85 --port 8080 --tls > report.md
 """
+
 from __future__ import annotations
 
 import argparse

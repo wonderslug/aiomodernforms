@@ -1,4 +1,5 @@
 """Async IO client library for Modern Forms fans."""
+
 from __future__ import annotations
 
 import asyncio
