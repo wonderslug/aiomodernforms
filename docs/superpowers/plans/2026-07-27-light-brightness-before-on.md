@@ -59,9 +59,9 @@ async def test_light(aresponses):
         assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER in data
         assert aiomodernforms.COMMAND_LIGHT_BRIGHTNESS not in data
         modified_response = basic_response.copy()
-        modified_response[
-            STATE_LIGHT_BRIGHTNESS
-        ] = aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
+        modified_response[STATE_LIGHT_BRIGHTNESS] = (
+            aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
+        )
         modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
         modified_response[STATE_LIGHT_SLEEP_TIMER] = data[
             aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER
@@ -201,52 +201,52 @@ Expected: `test_light` **FAILS** (current `light()` still sends a single combine
 In `aiomodernforms/modernforms.py`, replace the `light()` method (lines 277-315) with:
 
 ```python
-    async def light(
-        self,
-        *,
-        brightness: int | None = None,
-        on: bool | None = None,
-        sleep: int | datetime | None = None,
+async def light(
+    self,
+    *,
+    brightness: int | None = None,
+    on: bool | None = None,
+    sleep: int | datetime | None = None,
+):
+    """Change Fans Light state."""
+    if self._device is None:
+        await self.update()
+
+    if brightness is not None and (
+        not isinstance(brightness, int)
+        or int(brightness) < LIGHT_BRIGHTNESS_LOW_VALUE
+        or int(brightness) > LIGHT_BRIGHTNESS_HIGH_VALUE
     ):
-        """Change Fans Light state."""
-        if self._device is None:
-            await self.update()
+        raise ModernFormsInvalidSettingsError(
+            "brightness value must be between"
+            + f" {LIGHT_BRIGHTNESS_LOW_VALUE} and {LIGHT_BRIGHTNESS_HIGH_VALUE}"
+        )
 
-        if brightness is not None and (
-            not isinstance(brightness, int)
-            or int(brightness) < LIGHT_BRIGHTNESS_LOW_VALUE
-            or int(brightness) > LIGHT_BRIGHTNESS_HIGH_VALUE
-        ):
-            raise ModernFormsInvalidSettingsError(
-                "brightness value must be between"
-                + f" {LIGHT_BRIGHTNESS_LOW_VALUE} and {LIGHT_BRIGHTNESS_HIGH_VALUE}"
-            )
+    if on is not None and not isinstance(on, bool):
+        raise ModernFormsInvalidSettingsError("on must be a boolean")
 
-        if on is not None and not isinstance(on, bool):
-            raise ModernFormsInvalidSettingsError("on must be a boolean")
+    sleep_commands: dict[str, int] = {}
+    if sleep is not None:
+        sleep_commands = self._sleep_command(
+            COMMAND_LIGHT_SLEEP_TIMER, COMMAND_LIGHT_TIMER, sleep
+        )
 
-        sleep_commands: dict[str, int] = {}
-        if sleep is not None:
-            sleep_commands = self._sleep_command(
-                COMMAND_LIGHT_SLEEP_TIMER, COMMAND_LIGHT_TIMER, sleep
-            )
+    if brightness is not None and on is True:
+        # Setting brightness and turning on in a single request makes the
+        # fan briefly show the previous brightness before jumping to the
+        # new one. Sending brightness first avoids the flash.
+        await self.request(commands={COMMAND_LIGHT_BRIGHTNESS: brightness})
+        await self.request(commands={COMMAND_LIGHT_POWER: on, **sleep_commands})
+        return
 
-        if brightness is not None and on is True:
-            # Setting brightness and turning on in a single request makes the
-            # fan briefly show the previous brightness before jumping to the
-            # new one. Sending brightness first avoids the flash.
-            await self.request(commands={COMMAND_LIGHT_BRIGHTNESS: brightness})
-            await self.request(commands={COMMAND_LIGHT_POWER: on, **sleep_commands})
-            return
+    commands: dict[str, bool | int] = {}
+    if brightness is not None:
+        commands[COMMAND_LIGHT_BRIGHTNESS] = brightness
+    if on is not None:
+        commands[COMMAND_LIGHT_POWER] = on
+    commands.update(sleep_commands)
 
-        commands: dict[str, bool | int] = {}
-        if brightness is not None:
-            commands[COMMAND_LIGHT_BRIGHTNESS] = brightness
-        if on is not None:
-            commands[COMMAND_LIGHT_POWER] = on
-        commands.update(sleep_commands)
-
-        await self.request(commands=commands)
+    await self.request(commands=commands)
 ```
 
 This preserves the original validation order (brightness, then `on`, then `sleep` via `_sleep_command`) so `test_invalid_setting` (which checks each raises `ModernFormsInvalidSettingsError` with zero HTTP calls) keeps passing unchanged.
