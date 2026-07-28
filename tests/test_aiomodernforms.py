@@ -21,9 +21,13 @@ from aiomodernforms.const import (
     STATE_FAN_POWER,
     STATE_FAN_SLEEP_TIMER,
     STATE_FAN_SPEED,
+    STATE_FAN_TIMER,
     STATE_LIGHT_BRIGHTNESS,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
+    STATE_LIGHT_TIMER,
+    STATE_RF_PAIR_MODE_ACTIVE,
+    STATE_SCHEDULE,
     STATE_WIND_POWER,
     STATE_WIND_SPEED,
 )
@@ -68,6 +72,29 @@ breeze_mode_response = {
     "resetRfPairList": False,
     "rfPairModeActive": False,
     "schedule": "",
+    "userData": "cloud",
+    "wind": False,
+    "windSpeed": 2,
+}
+
+
+gen3_relative_timer_response = {
+    "adaptiveLearning": False,
+    "awayModeEnabled": False,
+    "clientId": "MF_C82B9698E5AC",
+    "decommission": False,
+    "factoryReset": False,
+    "fanDirection": "forward",
+    "fanOn": False,
+    "fanTimer": 0,
+    "fanSpeed": 3,
+    "lightBrightness": 50,
+    "lightOn": False,
+    "lightTimer": 0,
+    "resetRfPairList": False,
+    "rfPairModeActive": False,
+    "schedule": "",
+    "userData": "cloud",
     "wind": False,
     "windSpeed": 2,
 }
@@ -90,6 +117,64 @@ basic_info = {
 }
 
 
+gen3_info = {
+    "clientId": "MF_C82B9698E5AC",
+    "mac": "C8:2B:96:98:E5:AC",
+    "lightType": "",
+    "fanType": "2003-52",
+    "fanMotorType": "DC125X12",
+    "brand": 0,
+    "dateCode": "20220101",
+    "owner": "someone@somewhere.com",
+    "federatedIdentity": "us-east-1:f3da237b-c19c-4f61-b387-0e6dde2e470b",
+    "deviceName": "Fan",
+    "firmwareVersion": "02.00.0003",
+    "mainMcuFirmwareVersion": "02.01.0000",
+    "firmwareUrl": "",
+}
+
+
+gen1_2_config_response = {
+    "T": "Current Configuration",
+    "N": "WAC Windermier Fan(83DEF0)",
+    "C": [{"N": "APPLICATION", "C": []}],
+    "PO": "com.modernforms.fan",
+    "HD": "WAC_WINDERMIER_REV_5",
+    "FW": "01.03.0021",
+    "RF": "wl0: Oct  6 2016 01:32:44 version 5.90.230.15 ",
+    "certificateId": "6v6amxh5vbb2qjnkrp2av8i8r1tk1svzwn4ktrr9ds2ljz65ycfq1y026r6b77pt",
+    "Wi-Fi strength": 100,
+}
+
+gen3_config_response = {
+    "Name": "MF_Fan_98E5AC",
+    "Protocol": "com.modernforms.fan",
+    "Firmware Rev": "02.00.0003",
+    "RF Rev": "v3.2.2",
+    "certificateId": "6v6amxh5vbb2qjnkrp2av8i8r1tk1svzwn4ktrr9ds2ljz65ycfq1y026r6b77pt",
+    "Wi-Fi strength": "-48",
+}
+
+# Observed on real Gen 1/2 hardware: uses "WiFi" instead of the documented
+# "Wi-Fi strength" key, and includes several undocumented extra fields.
+real_gen1_2_config_response = {
+    "N": "WAC Windermier Fan(860E84)",
+    "PO": "com.modernforms.fan",
+    "HD": "WAC_WINDERMIER_REV_5",
+    "FW": "01.03.0028",
+    "RF": "wl0: Sep 10 2014 11:28:46 version 5.90.230.10 ",
+    "TZ": "CST6CDT",
+    "NOW": "Mon Jul 27 19:09:05 2026\n",
+    "certificateId": "ab3ce5c71c15bb3d2d2d2884efef0d6e7d681bb41bdbef2445fb536e220db3fd",
+    "FS": "387|396KB",
+    "WiFi": 100,
+    "MQTTCommission": 0,
+    "MQTTShadow": 11,
+    "MQTTCommissionCnt": 1,
+    "MQTTShadowCnt": 125,
+}
+
+
 @pytest.mark.asyncio
 async def test_basic_status(aresponses):
     """Test JSON response is handled correctly."""
@@ -109,6 +194,115 @@ async def test_basic_status(aresponses):
         assert response.fan_on == basic_response["fanOn"]
         assert device.status.fan_direction == "forward"
         assert device.info.fan_type == "1818-56"
+
+
+@pytest.mark.asyncio
+async def test_gen3_info_capture(aresponses):
+    """Test that Gen 3's brand and dateCode info fields are captured."""
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.info.brand == gen3_info["brand"]
+        assert device.info.date_code == gen3_info["dateCode"]
+
+
+@pytest.mark.asyncio
+async def test_gen1_2_info_defaults(aresponses):
+    """Test that Gen 1/2 info responses default brand/dateCode sensibly."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.info.brand is None
+        assert device.info.date_code == ""
+
+
+@pytest.mark.asyncio
+async def test_config_gen1_2(aresponses):
+    """Test config() against a Gen 1/2-shaped /config-read response."""
+    aresponses.add("fan.local", "/config-read", "POST", response=gen1_2_config_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        config = await device.config()
+        assert config.device_name == "WAC Windermier Fan(83DEF0)"
+        assert config.protocol == "com.modernforms.fan"
+        assert config.hardware_revision == "WAC_WINDERMIER_REV_5"
+        assert config.firmware_version == "01.03.0021"
+        assert config.certificate_id.startswith("6v6amxh5vbb2qjnkrp2av8i8r1")
+        assert config.wifi_strength == "100"
+
+
+@pytest.mark.asyncio
+async def test_config_gen3(aresponses):
+    """Test config() against a Gen 3-shaped /config-read response."""
+    aresponses.add("fan.local", "/config-read", "POST", response=gen3_config_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        config = await device.config()
+        assert config.device_name == "MF_Fan_98E5AC"
+        assert config.protocol == "com.modernforms.fan"
+        assert config.hardware_revision == ""
+        assert config.firmware_version == "02.00.0003"
+        assert config.rf_version == "v3.2.2"
+        assert config.wifi_strength == "-48"
+
+
+@pytest.mark.asyncio
+async def test_config_real_gen1_2_wifi_key(aresponses):
+    """Test wifi_strength falls back to the "WiFi" key seen on real Gen 1/2 hardware."""
+    aresponses.add(
+        "fan.local", "/config-read", "POST", response=real_gen1_2_config_response
+    )
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        config = await device.config()
+        assert config.device_name == "WAC Windermier Fan(860E84)"
+        assert config.hardware_revision == "WAC_WINDERMIER_REV_5"
+        assert config.wifi_strength == "100"
+
+
+@pytest.mark.asyncio
+async def test_config_uses_config_read_path(aresponses):
+    """Test that regular /mf traffic (update()) is unaffected by config()."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+    aresponses.add("fan.local", "/config-read", "POST", response=gen3_config_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        config = await device.config()
+        assert device.status.fan_on == basic_response["fanOn"]
+        assert config.device_name == "MF_Fan_98E5AC"
+
+
+@pytest.mark.asyncio
+async def test_full_state_capture(aresponses):
+    """Test that all documented dynamic shadow fields are captured on State."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.schedule == basic_response["schedule"]
+        assert device.status.rf_pair_mode_active == basic_response["rfPairModeActive"]
+        assert device.status.reset_rf_pair_list == basic_response["resetRfPairList"]
+        assert device.status.factory_reset == basic_response["factoryReset"]
+        assert device.status.decommission == basic_response["decommission"]
+        assert device.status.user_data == ""
+
+
+@pytest.mark.asyncio
+async def test_gen3_user_data_capture(aresponses):
+    """Test that Gen 3's userData field is captured on State."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=breeze_mode_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.user_data == breeze_mode_response["userData"]
 
 
 @pytest.mark.asyncio
@@ -364,6 +558,184 @@ async def test_nonupdated_device_for_breeze_mode():
 
 
 @pytest.mark.asyncio
+async def test_has_relative_timers_true_for_gen3(aresponses):
+    """Test that a Gen 3-style response (fanTimer/lightTimer) is detected."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.fan_timer == gen3_relative_timer_response["fanTimer"]
+        assert device.status.light_timer == gen3_relative_timer_response["lightTimer"]
+        assert device.has_relative_timers() is True
+
+
+@pytest.mark.asyncio
+async def test_has_relative_timers_false_for_gen1_2(aresponses):
+    """Test that a Gen 1/2-style response is not mistaken for relative timers."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.fan_timer is None
+        assert device.status.light_timer is None
+        assert device.has_relative_timers() is False
+
+
+@pytest.mark.asyncio
+async def test_nonupdated_device_for_relative_timers():
+    """Test that has_relative_timers only looks at an initialized device."""
+    with pytest.raises(ModernFormsNotInitializedError):
+        async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+            device.has_relative_timers()
+
+
+@pytest.mark.asyncio
+async def test_light_sleep_relative_timer_int(aresponses):
+    """Test that light sleep uses relative seconds on a Gen 3-style device."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_TIMER in data
+        assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER not in data
+        assert data[aiomodernforms.COMMAND_LIGHT_TIMER] == 120
+        modified_response = gen3_relative_timer_response.copy()
+        modified_response[STATE_LIGHT_TIMER] = data[aiomodernforms.COMMAND_LIGHT_TIMER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(sleep=120)
+        assert device.status.light_timer == 120
+
+
+@pytest.mark.asyncio
+async def test_light_sleep_relative_timer_without_prior_update(aresponses):
+    """Test that light() self-inits via update() before deciding timer semantics.
+
+    Calling light(sleep=...) without an explicit prior update() call must
+    still detect Gen 3 relative timer support (rather than deciding epoch
+    semantics before the lazy self-init update() runs) and send the
+    relative COMMAND_LIGHT_TIMER command instead of the epoch one.
+    """
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_TIMER in data
+        assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER not in data
+        assert data[aiomodernforms.COMMAND_LIGHT_TIMER] == 120
+        modified_response = gen3_relative_timer_response.copy()
+        modified_response[STATE_LIGHT_TIMER] = data[aiomodernforms.COMMAND_LIGHT_TIMER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        # deliberately no explicit `await device.update()` before this call
+        await device.light(sleep=120)
+        assert device.status.light_timer == 120
+
+
+@pytest.mark.asyncio
+async def test_fan_sleep_relative_timer_without_prior_update(aresponses):
+    """Test that fan() self-inits via update() before deciding timer semantics.
+
+    Same as test_light_sleep_relative_timer_without_prior_update but for
+    fan(), confirming COMMAND_FAN_TIMER (relative) is sent rather than the
+    epoch COMMAND_FAN_SLEEP_TIMER command.
+    """
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_FAN_TIMER in data
+        assert aiomodernforms.COMMAND_FAN_SLEEP_TIMER not in data
+        assert data[aiomodernforms.COMMAND_FAN_TIMER] == 120
+        modified_response = gen3_relative_timer_response.copy()
+        modified_response[STATE_FAN_TIMER] = data[aiomodernforms.COMMAND_FAN_TIMER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        # deliberately no explicit `await device.update()` before this call
+        await device.fan(sleep=120)
+        assert device.status.fan_timer == 120
+
+
+@pytest.mark.asyncio
+async def test_fan_sleep_relative_timer_datetime(aresponses):
+    """Test that fan sleep uses relative seconds on a Gen 3-style device."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_FAN_TIMER in data
+        assert aiomodernforms.COMMAND_FAN_SLEEP_TIMER not in data
+        modified_response = gen3_relative_timer_response.copy()
+        modified_response[STATE_FAN_TIMER] = data[aiomodernforms.COMMAND_FAN_TIMER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        sleep_time = datetime.now() + timedelta(minutes=2)
+        await device.fan(sleep=sleep_time)
+        assert device.status.fan_timer == pytest.approx(120, abs=2)
+
+
+@pytest.mark.asyncio
+async def test_light_sleep_relative_timer_clear(aresponses):
+    """Test that sleep=0 cancels the timer under relative-timer semantics too."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data.get(aiomodernforms.COMMAND_LIGHT_TIMER) == 0
+        modified_response = gen3_relative_timer_response.copy()
+        modified_response[STATE_LIGHT_TIMER] = 0
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(sleep=0)
+        assert device.status.light_timer == 0
+
+
+@pytest.mark.asyncio
 async def test_fan_sleep_datetime(aresponses):
     """Test to make sure setting light sleep works."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
@@ -500,6 +872,197 @@ async def test_adaptive_learning(aresponses):
         await device.update()
         await device.adaptive_learning(ADAPTIVE_LEARNING_ON)
         assert device.status.adaptive_learning_enabled
+
+
+@pytest.mark.asyncio
+async def test_enable_pairing_mode(aresponses):
+    """Test enabling RF pairing mode."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_RF_PAIR_MODE in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_RF_PAIR_MODE_ACTIVE] = data[
+            aiomodernforms.COMMAND_RF_PAIR_MODE
+        ]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.enable_pairing_mode()
+        assert device.status.rf_pair_mode_active is True
+
+
+@pytest.mark.asyncio
+async def test_disable_pairing_mode(aresponses):
+    """Test disabling RF pairing mode via enable_pairing_mode(active=False)."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data.get(aiomodernforms.COMMAND_RF_PAIR_MODE) is False
+        modified_response = basic_response.copy()
+        modified_response[STATE_RF_PAIR_MODE_ACTIVE] = data[
+            aiomodernforms.COMMAND_RF_PAIR_MODE
+        ]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.enable_pairing_mode(False)
+        assert device.status.rf_pair_mode_active is False
+
+
+@pytest.mark.asyncio
+async def test_clear_paired_devices(aresponses):
+    """Test clearing RF-paired devices."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data.get(aiomodernforms.COMMAND_RESET_RF_PAIR_LIST) is True
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(basic_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.clear_paired_devices()
+
+
+@pytest.mark.asyncio
+async def test_factory_reset(aresponses):
+    """Test how factory reset is handled, including the resulting disconnect."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with patch(
+            "aiomodernforms.ModernFormsDevice.request",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.factory_reset()
+
+
+@pytest.mark.asyncio
+async def test_factory_reset_sends_command(aresponses):
+    """Test that factory_reset() sends the correct wire-level payload."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data == {aiomodernforms.COMMAND_FACTORY_RESET: True}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(basic_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.factory_reset()
+
+
+@pytest.mark.asyncio
+async def test_decommission(aresponses):
+    """Test how decommission is handled, including the resulting disconnect."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with patch(
+            "aiomodernforms.ModernFormsDevice.request",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.decommission()
+
+
+@pytest.mark.asyncio
+async def test_decommission_sends_command(aresponses):
+    """Test that decommission() sends the correct wire-level payload."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data == {aiomodernforms.COMMAND_DECOMMISSION: True}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(basic_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.decommission()
+
+
+@pytest.mark.asyncio
+async def test_set_schedule(aresponses):
+    """Test setting the schedule blob."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_SCHEDULE in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_SCHEDULE] = data[aiomodernforms.COMMAND_SCHEDULE]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.set_schedule("AAAAAPwDAGSgBQAAnAkAZEAL")
+        assert device.status.schedule == "AAAAAPwDAGSgBQAAnAkAZEAL"
+
+
+@pytest.mark.asyncio
+async def test_away_requires_argument():
+    """Test that away() requires an explicit boolean argument."""
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        with pytest.raises(TypeError):
+            await device.away()  # type: ignore[call-arg]
+
+
+@pytest.mark.asyncio
+async def test_adaptive_learning_requires_argument():
+    """Test that adaptive_learning() requires an explicit boolean argument."""
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        with pytest.raises(TypeError):
+            await device.adaptive_learning()  # type: ignore[call-arg]
 
 
 @pytest.mark.asyncio

@@ -47,3 +47,23 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
 ```
+
+## Reporting compatibility issues
+
+WAC and Modern Forms fans span several hardware generations, and not every
+generation behaves identically. If this library doesn't work correctly
+against your fan, run `diagnose.py` against it and paste the output into a
+[GitHub issue](https://github.com/wonderslug/aiomodernforms/issues):
+
+```bash
+python diagnose.py <fan-ip-address>
+# or, from a checkout with a dev environment set up:
+make diagnose HOST=<fan-ip-address>
+```
+
+This prints a Markdown report — parsed capability flags, the raw API
+responses, and any response fields this library doesn't recognize yet — that
+helps pinpoint model/generation differences. It redacts your account email,
+AWS identity, MAC address, device name, and certificate ID, and never
+includes the fan's IP address, so the output is safe to paste as-is. Still,
+give it a quick read before posting.

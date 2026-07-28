@@ -6,15 +6,22 @@ from .const import (  # noqa
     AWAY_MODE_ON,
     COMMAND_ADAPTIVE_LEARNING,
     COMMAND_AWAY_MODE,
+    COMMAND_DECOMMISSION,
+    COMMAND_FACTORY_RESET,
     COMMAND_FAN_DIRECTION,
     COMMAND_FAN_POWER,
     COMMAND_FAN_SLEEP_TIMER,
     COMMAND_FAN_SPEED,
+    COMMAND_FAN_TIMER,
     COMMAND_LIGHT_BRIGHTNESS,
     COMMAND_LIGHT_POWER,
     COMMAND_LIGHT_SLEEP_TIMER,
+    COMMAND_LIGHT_TIMER,
     COMMAND_QUERY_STATUS,
     COMMAND_REBOOT,
+    COMMAND_RESET_RF_PAIR_LIST,
+    COMMAND_RF_PAIR_MODE,
+    COMMAND_SCHEDULE,
     COMMAND_WIND,
     COMMAND_WIND_SPEED,
     FAN_DIRECTION_FORWARD,
@@ -40,4 +47,5 @@ from .exceptions import (  # noqa
     ModernFormsInvalidSettingsError,
     ModernFormsNotInitializedError,
 )
+from .models import ConfigInfo  # noqa
 from .modernforms import ModernFormsDevice  # noqa

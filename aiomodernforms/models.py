@@ -2,11 +2,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from .const import (
+    CONFIG_CERTIFICATE_ID,
+    CONFIG_FIRMWARE_VERSION,
+    CONFIG_FIRMWARE_VERSION_LEGACY,
+    CONFIG_HARDWARE_REVISION,
+    CONFIG_NAME,
+    CONFIG_NAME_LEGACY,
+    CONFIG_PROTOCOL,
+    CONFIG_PROTOCOL_LEGACY,
+    CONFIG_RF_VERSION,
+    CONFIG_RF_VERSION_LEGACY,
+    CONFIG_WIFI_STRENGTH,
+    CONFIG_WIFI_STRENGTH_ALT,
     DEFAULT_WIND_SPEED,
+    INFO_BRAND,
     INFO_CLIENT_ID,
+    INFO_DATE_CODE,
     INFO_DEVICE_NAME,
     INFO_FAN_MOTOR_TYPE,
     INFO_FAN_TYPE,
@@ -21,13 +35,21 @@ from .const import (
     INFO_PRODUCTION_LOT_NUMBER,
     STATE_ADAPTIVE_LEARNING,
     STATE_AWAY_MODE,
+    STATE_DECOMMISSION,
+    STATE_FACTORY_RESET,
     STATE_FAN_DIRECTION,
     STATE_FAN_POWER,
     STATE_FAN_SLEEP_TIMER,
     STATE_FAN_SPEED,
+    STATE_FAN_TIMER,
     STATE_LIGHT_BRIGHTNESS,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
+    STATE_LIGHT_TIMER,
+    STATE_RESET_RF_PAIR_LIST,
+    STATE_RF_PAIR_MODE_ACTIVE,
+    STATE_SCHEDULE,
+    STATE_USER_DATA,
     STATE_WIND_POWER,
     STATE_WIND_SPEED,
 )
@@ -50,6 +72,8 @@ class Info:
     firmware_version: str
     main_mcu_firmware_version: str
     firmware_url: str
+    brand: Optional[int] = None
+    date_code: str = ""
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> Info:
@@ -68,6 +92,49 @@ class Info:
             firmware_version=data.get(INFO_FIRMWARE_VERSION, ""),
             main_mcu_firmware_version=data.get(INFO_MAIN_MCU_FIRMWARE_VERSION, ""),
             firmware_url=data.get(INFO_FIRMWARE_URL, ""),
+            brand=data.get(INFO_BRAND),
+            date_code=data.get(INFO_DATE_CODE, ""),
+        )
+
+
+@dataclass
+class ConfigInfo:
+    """Config-read info about the Modern Forms device.
+
+    Fetched from a separate `/config-read` endpoint whose response shape
+    differs by fan generation. `wifi_strength` is kept as the raw string
+    the device returned: Gen 1/2 fans report it as a percentage, Gen 3
+    fans report it as a dBm value — callers must interpret it themselves.
+    Real Gen 1/2 firmware has been observed sending this under the
+    undocumented key "WiFi" rather than the vendor doc's "Wi-Fi strength";
+    both are checked.
+    """
+
+    device_name: str
+    protocol: str
+    hardware_revision: str
+    firmware_version: str
+    rf_version: str
+    certificate_id: str
+    wifi_strength: str
+
+    @staticmethod
+    def from_dict(data: Dict[str, Any]) -> ConfigInfo:
+        """Return ConfigInfo object from a Modern Forms /config-read response."""
+        return ConfigInfo(
+            device_name=data.get(CONFIG_NAME, data.get(CONFIG_NAME_LEGACY, "")),
+            protocol=data.get(CONFIG_PROTOCOL, data.get(CONFIG_PROTOCOL_LEGACY, "")),
+            hardware_revision=data.get(CONFIG_HARDWARE_REVISION, ""),
+            firmware_version=data.get(
+                CONFIG_FIRMWARE_VERSION, data.get(CONFIG_FIRMWARE_VERSION_LEGACY, "")
+            ),
+            rf_version=data.get(
+                CONFIG_RF_VERSION, data.get(CONFIG_RF_VERSION_LEGACY, "")
+            ),
+            certificate_id=data.get(CONFIG_CERTIFICATE_ID, ""),
+            wifi_strength=str(
+                data.get(CONFIG_WIFI_STRENGTH, data.get(CONFIG_WIFI_STRENGTH_ALT, ""))
+            ),
         )
 
 
@@ -86,6 +153,14 @@ class State:
     adaptive_learning_enabled: bool
     wind: bool
     wind_speed: int
+    rf_pair_mode_active: bool = False
+    reset_rf_pair_list: bool = False
+    factory_reset: bool = False
+    decommission: bool = False
+    schedule: str = ""
+    user_data: str = ""
+    fan_timer: Optional[int] = None
+    light_timer: Optional[int] = None
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> State:
@@ -102,6 +177,14 @@ class State:
             adaptive_learning_enabled=data.get(STATE_ADAPTIVE_LEARNING, False),
             wind=data.get(STATE_WIND_POWER, None),
             wind_speed=data.get(STATE_WIND_SPEED, DEFAULT_WIND_SPEED),
+            rf_pair_mode_active=data.get(STATE_RF_PAIR_MODE_ACTIVE, False),
+            reset_rf_pair_list=data.get(STATE_RESET_RF_PAIR_LIST, False),
+            factory_reset=data.get(STATE_FACTORY_RESET, False),
+            decommission=data.get(STATE_DECOMMISSION, False),
+            schedule=data.get(STATE_SCHEDULE, ""),
+            user_data=data.get(STATE_USER_DATA, ""),
+            fan_timer=data.get(STATE_FAN_TIMER),
+            light_timer=data.get(STATE_LIGHT_TIMER),
         )
 
 
@@ -128,3 +211,7 @@ class Device:
     def has_wind(self) -> bool:
         """See if the Fan has Breeze Mode."""
         return self.state.wind is not None
+
+    def has_relative_timers(self) -> bool:
+        """See if the Fan uses relative (seconds-until-off) sleep timers."""
+        return self.state.fan_timer is not None or self.state.light_timer is not None
