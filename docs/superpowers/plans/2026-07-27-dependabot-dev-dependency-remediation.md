@@ -17,6 +17,7 @@
 - `setup.py` already declares `python_requires=">=3.11"`; black's `--target-version` and pyupgrade's `--py*-plus` arg must match (`py311`).
 - **Deviation from spec:** the spec listed `autopep8` target as `2.3.2` (latest PyPI release). The `pre-commit/mirrors-autopep8` hook repo that mirrors it has not been tagged past `v2.0.4` (confirmed via `git ls-remote --tags`), so the pre-commit hook cannot go higher than that. This plan pins `autopep8==2.0.4` in `requirements_dev.txt` (matching the mirror) instead of `2.3.2`, to keep the two files in sync. This is still a large jump up from the current `1.6.0` and is not a Dependabot-flagged package.
 - **Deviation from spec (discovered during Task 1 execution):** `pytest-cov==7.1.0` requires `coverage[toml]>=7.10.6` (confirmed via PyPI metadata: `pytest-cov` 6.x needs `coverage>=7.5`, 7.x needs `coverage>=7.10.6`). The original spec/plan left `coverage==7.2.7` pinned until Task 2, which makes Task 1's own `pip install` unresolvable. `coverage` is not Dependabot-flagged, but it is a hard install-time dependency of `pytest-cov`, exactly like `pytest-asyncio` is of `pytest` — so its bump to `7.15.2` moves into Task 1, not Task 2. Task 2's file contents are unaffected (it already targeted `coverage==7.15.2`); only the task boundary moved.
+- **Deviation from spec (discovered during Task 2 execution):** the spec/plan's Task 2 Step 3 originally listed `check-byte-order-marker` and `fix-encoding-pragma` as unchanged hook `id`s under `pre-commit-hooks` `rev: v6.0.0`. Confirmed against the upstream manifest that both are actually non-functional `(removed)` stubs in `v6.0.0` — they exist only as `entry: pre-commit-hooks-removed` shims that always fail. `check-byte-order-marker` was swapped for `fix-byte-order-marker` (the maintained, functionally-equivalent replacement); `fix-encoding-pragma` was dropped entirely, since `pyupgrade --py311-plus` (already configured in this same step) already strips encoding pragmas, making the hook redundant as well as broken. This was implemented directly in `.pre-commit-config.yaml` and is reflected in the Task 2 Step 3 YAML block below.
 
 ---
 
@@ -255,10 +256,15 @@ repos:
       - id: check-json
       - id: check-yaml
       - id: requirements-txt-fixer
-      - id: check-byte-order-marker
+      # check-byte-order-marker and fix-encoding-pragma are non-functional
+      # (removed) stubs as of pre-commit-hooks v6.0.0 (entry:
+      # pre-commit-hooks-removed, always fails; earlier versions not
+      # checked). check-byte-order-marker is replaced below by
+      # fix-byte-order-marker, the maintained equivalent; fix-encoding-pragma
+      # is dropped entirely in favor of pyupgrade --py311-plus (already
+      # configured below), which already strips encoding pragmas.
+      - id: fix-byte-order-marker
       - id: check-case-conflict
-      - id: fix-encoding-pragma
-        args: ["--remove"]
       - id: check-ast
       - id: detect-private-key
       - id: forbid-new-submodules
@@ -299,7 +305,7 @@ repos:
 exclude: '^.github/.*'
 ```
 
-Note: all currently-used hook `id`s (`check-byte-order-marker`, `fix-encoding-pragma`, `forbid-new-submodules`, etc.) were confirmed still present in `pre-commit-hooks` `v6.0.0` before writing this step — no hook renames/removals to account for.
+Note: `check-byte-order-marker` and `fix-encoding-pragma` turned out to be non-functional `(removed)` stubs in `pre-commit-hooks` `v6.0.0` — they exist only as `entry: pre-commit-hooks-removed` shims that always fail, confirmed against the upstream manifest. `check-byte-order-marker` was replaced with `fix-byte-order-marker` (the maintained equivalent); `fix-encoding-pragma` was dropped in favor of `pyupgrade --py311-plus` (already configured below), which already strips encoding pragmas. See the corresponding Global Constraints bullet.
 
 - [ ] **Step 4: Reinstall dependencies into the existing venv**
 

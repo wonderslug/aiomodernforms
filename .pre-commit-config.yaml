@@ -21,15 +21,15 @@ repos:
       - id: check-json
       - id: check-yaml
       - id: requirements-txt-fixer
-      # check-byte-order-marker was removed upstream in pre-commit-hooks
-      # v4.x+ (id kept only as a stub that always fails); fix-byte-order-marker
-      # is the maintained replacement with equivalent behavior.
+      # check-byte-order-marker and fix-encoding-pragma are non-functional
+      # (removed) stubs as of pre-commit-hooks v6.0.0 (entry:
+      # pre-commit-hooks-removed, always fails; earlier versions not
+      # checked). check-byte-order-marker is replaced below by
+      # fix-byte-order-marker, the maintained equivalent; fix-encoding-pragma
+      # is dropped entirely in favor of pyupgrade --py311-plus (already
+      # configured below), which already strips encoding pragmas.
       - id: fix-byte-order-marker
       - id: check-case-conflict
-      # fix-encoding-pragma was removed upstream in pre-commit-hooks v4.x+
-      # (id kept only as a stub that always fails); pyupgrade --py311-plus
-      # (already configured below) removes encoding pragmas, making this
-      # hook redundant as well as non-functional.
       - id: check-ast
       - id: detect-private-key
       - id: forbid-new-submodules
