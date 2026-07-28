@@ -155,6 +155,25 @@ gen3_config_response = {
     "Wi-Fi strength": "-48",
 }
 
+# Observed on real Gen 1/2 hardware: uses "WiFi" instead of the documented
+# "Wi-Fi strength" key, and includes several undocumented extra fields.
+real_gen1_2_config_response = {
+    "N": "WAC Windermier Fan(860E84)",
+    "PO": "com.modernforms.fan",
+    "HD": "WAC_WINDERMIER_REV_5",
+    "FW": "01.03.0028",
+    "RF": "wl0: Sep 10 2014 11:28:46 version 5.90.230.10 ",
+    "TZ": "CST6CDT",
+    "NOW": "Mon Jul 27 19:09:05 2026\n",
+    "certificateId": "ab3ce5c71c15bb3d2d2d2884efef0d6e7d681bb41bdbef2445fb536e220db3fd",
+    "FS": "387|396KB",
+    "WiFi": 100,
+    "MQTTCommission": 0,
+    "MQTTShadow": 11,
+    "MQTTCommissionCnt": 1,
+    "MQTTShadowCnt": 125,
+}
+
 
 @pytest.mark.asyncio
 async def test_basic_status(aresponses):
@@ -229,6 +248,20 @@ async def test_config_gen3(aresponses):
         assert config.firmware_version == "02.00.0003"
         assert config.rf_version == "v3.2.2"
         assert config.wifi_strength == "-48"
+
+
+@pytest.mark.asyncio
+async def test_config_real_gen1_2_wifi_key(aresponses):
+    """Test wifi_strength falls back to the "WiFi" key seen on real Gen 1/2 hardware."""
+    aresponses.add(
+        "fan.local", "/config-read", "POST", response=real_gen1_2_config_response
+    )
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        config = await device.config()
+        assert config.device_name == "WAC Windermier Fan(860E84)"
+        assert config.hardware_revision == "WAC_WINDERMIER_REV_5"
+        assert config.wifi_strength == "100"
 
 
 @pytest.mark.asyncio
