@@ -1,8 +1,9 @@
 """Models for Async IO Modern Forms."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .const import (
     CONFIG_CERTIFICATE_ID,
@@ -72,11 +73,11 @@ class Info:
     firmware_version: str
     main_mcu_firmware_version: str
     firmware_url: str
-    brand: Optional[int] = None
+    brand: int | None = None
     date_code: str = ""
 
     @staticmethod
-    def from_dict(data: Dict[str, Any]) -> Info:
+    def from_dict(data: dict[str, Any]) -> Info:
         """Return Info object from Modern Forms API response."""
         return Info(
             client_id=data.get(INFO_CLIENT_ID, ""),
@@ -119,7 +120,7 @@ class ConfigInfo:
     wifi_strength: str
 
     @staticmethod
-    def from_dict(data: Dict[str, Any]) -> ConfigInfo:
+    def from_dict(data: dict[str, Any]) -> ConfigInfo:
         """Return ConfigInfo object from a Modern Forms /config-read response."""
         return ConfigInfo(
             device_name=data.get(CONFIG_NAME, data.get(CONFIG_NAME_LEGACY, "")),
@@ -151,7 +152,7 @@ class State:
     light_sleep_timer: int
     away_mode_enabled: bool
     adaptive_learning_enabled: bool
-    wind: bool
+    wind: bool | None
     wind_speed: int
     rf_pair_mode_active: bool = False
     reset_rf_pair_list: bool = False
@@ -159,11 +160,11 @@ class State:
     decommission: bool = False
     schedule: str = ""
     user_data: str = ""
-    fan_timer: Optional[int] = None
-    light_timer: Optional[int] = None
+    fan_timer: int | None = None
+    light_timer: int | None = None
 
     @staticmethod
-    def from_dict(data: Dict[str, Any]) -> State:
+    def from_dict(data: dict[str, Any]) -> State:
         """Return State object from Modern Forms API response."""
         return State(
             fan_on=data.get(STATE_FAN_POWER, False),
@@ -200,7 +201,7 @@ class Device:
 
     def update_from_dict(
         self, state_data: dict | None = None, info_data: dict | None = None
-    ) -> "Device":
+    ) -> Device:
         """Update the device status with the passed dict."""
         if state_data is not None:
             self.state = State.from_dict(state_data)

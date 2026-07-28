@@ -1,5 +1,6 @@
 # pylint: disable=W0621
 """Asynchronous Python client for Async IO Modern Forms fan."""
+
 import asyncio
 from datetime import datetime, timedelta
 

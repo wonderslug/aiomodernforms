@@ -69,6 +69,11 @@ disable=
     too-many-public-methods,
     too-many-return-statements,
     too-many-statements,
+    # new in pylint 3.x/4.x: a separate, positional-only sibling of
+    # too-many-arguments (already disabled above) with its own default
+    # limit unrelated to max-args=10. Same rationale applies: constructors
+    # and functions here take many optional, keyword-style parameters.
+    too-many-positional-arguments,
     unnecessary-pass,
     # handled by black
     format
@@ -339,4 +344,4 @@ int-import-graph=
 
 # Exceptions that will emit a warning when being caught. Defaults to
 # "Exception"
-overgeneral-exceptions=Exception
+overgeneral-exceptions=builtins.Exception

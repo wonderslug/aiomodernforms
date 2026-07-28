@@ -25,14 +25,16 @@ Usage:
     python diagnose.py 192.168.1.85 --active > report.md
     python diagnose.py 192.168.1.85 --port 8080 --tls > report.md
 """
+
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
 import sys
+from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Dict, Iterable, List, Set, Tuple
+from typing import Any
 
 import aiomodernforms
 from aiomodernforms import const
@@ -121,7 +123,7 @@ def _redact_client_id(value: Any) -> Any:
     return REDACTED
 
 
-def redact(raw: Dict[str, Any]) -> Dict[str, Any]:
+def redact(raw: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of a raw API response with sensitive fields redacted."""
     cleaned = dict(raw)
     for key in cleaned:
@@ -134,7 +136,7 @@ def redact(raw: Dict[str, Any]) -> Dict[str, Any]:
     return cleaned
 
 
-def unknown_keys(raw: Dict[str, Any], known: Set[str]) -> Iterable[str]:
+def unknown_keys(raw: dict[str, Any], known: set[str]) -> Iterable[str]:
     """Keys present in a raw response that this library doesn't parse yet."""
     return sorted(set(raw) - known)
 
@@ -147,7 +149,7 @@ def _section(title: str) -> str:
     return f"\n### {title}\n"
 
 
-async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> List[str]:
+async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
     """Exercise reversible control commands and restore original state after.
 
     Never sends destructive or disruptive commands: reboot, factory_reset,
@@ -162,12 +164,12 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> List[str]:
     )
 
     original = fan.status
-    results: List[Tuple[str, bool, str]] = []
+    results: list[tuple[str, bool, str]] = []
     supports_wind = original.wind is not None
     relative_timers = fan.has_relative_timers()
 
     async def check(
-        name: str, action: Awaitable[Any], verify: Callable[[], Tuple[bool, str]]
+        name: str, action: Awaitable[Any], verify: Callable[[], tuple[bool, str]]
     ) -> None:
         try:
             await action
@@ -339,7 +341,7 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> List[str]:
         restore_error = None
         try:
             await fan.light(on=original.light_on, brightness=original.light_brightness)
-            fan_kwargs: Dict[str, Any] = {
+            fan_kwargs: dict[str, Any] = {
                 "on": original.fan_on,
                 "speed": original.fan_speed,
                 "direction": original.fan_direction,
