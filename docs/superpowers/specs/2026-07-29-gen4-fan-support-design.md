@@ -113,39 +113,67 @@ later polls.
 ### 3. Canonical translation, not a parallel model
 
 A new `aiomodernforms/gen4.py` module holds pure translation functions: classifying
-the `/fixture` read-all response's array by `type` (`13` → the fan; `{0, 1, 2, 14,
-15}` → lights; anything else — e.g. a Wall Station at `11` — ignored), and mapping
-each fixture's wire-shaped `state` into the *same* canonical dict keys
-`State.from_dict`/`Info.from_dict` already consume (`fanOn`, `fanSpeed`,
-`lightBrightness`, ...). `models.py` itself mostly stays generation-agnostic — it
-already tolerates optional keys being absent (that's how Gen 1/2 vs Gen 3 coexist
-today).
+the `/fixture` read-all response's array by `type`, and mapping each fixture's
+wire-shaped `state` into the *same* canonical dict keys `State.from_dict`/
+`Info.from_dict` already consume (`fanOn`, `fanSpeed`, `lightBrightness`, ...).
+`models.py` itself mostly stays generation-agnostic — it already tolerates optional
+keys being absent (that's how Gen 1/2 vs Gen 3 coexist today).
 
-**Multiple lights.** A new small dataclass holds one light's state:
+**Extensibility note.** The PDF defines ten fixture types in total (single-color
+dimmable, tunable white, RGBW, motorized trackhead, ELV single-color, wall station,
+24V controller, fan, and two decorative-light variants) across a broader WAC IoT
+product line (Ventrix, ColorScaping, InvisiLED, WAC Home Gateway) that this library
+doesn't otherwise support and isn't taking on here — a fan has exactly one Fan
+fixture and some number of Light-shaped fixtures, and that's what this design
+handles. But the classification step is written as a lookup against the numeric
+`type` field (`13` → fan; `{0, 1, 2, 14, 15}` → light-shaped; anything else — e.g. a
+Wall Station at `11` — ignored) rather than any fan-specific assumption, so a future
+"general WAC IoT client" effort covering the rest of the product line could build on
+the same `/fixture` request/response handling instead of starting over. No code for
+those other fixture/product types is written now.
+
+**Multiple lights, with capability info.** A new small dataclass holds one light's
+state:
 
 ```python
 @dataclass
 class Light:
     address: int | None  # None for gen1_2/gen3's single non-addressable light
+    fixture_type: int | None  # None for gen1_2/gen3; raw WAC fixture type otherwise
     name: str
     on: bool
     brightness: int  # 1-100, same scale as State.light_brightness
     color_temp_kelvin: int | None
+    min_color_temp_kelvin: int | None  # from the fixture's `detail`, when present
+    max_color_temp_kelvin: int | None
 ```
+
+`fixture_type` carries the raw numeric type the device reported (`0` = single-color
+dimmable, `1` = tunable white, `2` = RGBW, `14`/`15` = decorative — documented as
+behaving like tunable white) so a caller like the HA integration can decide exactly
+what to advertise per light — brightness-only for `0`, brightness + color temp for
+`1`/`14`/`15` — instead of guessing from which optional fields happen to be present.
+`min_color_temp_kelvin`/`max_color_temp_kelvin` come from that same fixture's
+`detail` object in the read-all response (no extra request) when the device reports
+a range; `None` when it doesn't (e.g. a non-CCT light, or firmware that omits
+`detail`). RGBW (`type == 2`) is deliberately not given color fields here — no known
+Modern Forms fan model uses it, and it's out of scope until one does (see below).
 
 `State` gains `light_fixtures: list[Light]`, populated for **every** generation, not
 just Gen4:
-- gen1_2/gen3: exactly one synthetic `Light(address=None, ...)` mirroring the
-  existing `light_on`/`light_brightness` fields.
-- gen4: one real `Light` per light fixture found in the read-all response, in the
-  order the device returned them, `address` set to that fixture's real address.
+- gen1_2/gen3: exactly one synthetic `Light(address=None, fixture_type=None, ...)`
+  mirroring the existing `light_on`/`light_brightness` fields, with color temp bounds
+  left `None` (Gen 1-3 has no color temperature control at all).
+- gen4: one real `Light` per light-shaped fixture found in the read-all response, in
+  the order the device returned them, with `address`/`fixture_type` set from that
+  fixture.
 
-This lets a caller (like the HA integration) iterate `status.light_fixtures`
-uniformly regardless of generation or how many lights a specific fan model has,
-instead of branching on generation or assuming a fixed count. The existing
-`light_on`/`light_brightness`/`light_color_temp_kelvin` fields on `State` continue to
-exist unchanged, always mirroring `light_fixtures[0]` — full backward compatibility
-for existing callers who only ever cared about "the" light.
+This lets a caller iterate `status.light_fixtures` uniformly regardless of
+generation or how many lights a specific fan model has, instead of branching on
+generation or assuming a fixed count. The existing `light_on`/`light_brightness`/
+`light_color_temp_kelvin` fields on `State` continue to exist unchanged, always
+mirroring `light_fixtures[0]` — full backward compatibility for existing callers who
+only ever cared about "the" light.
 
 ### 4. Control methods
 
@@ -245,7 +273,11 @@ profile, `GEN4`, alongside `GEN1_2`/`GEN3`:
   own addresses.
 - CLI gains `--generation gen4`; `--lights N` (default 1) controls how many light
   fixtures the mock reports, so the test suite can exercise 0, 1, 2, or more without
-  the mock or the library caring about a specific "uplight" concept.
+  the mock or the library caring about a specific "uplight" concept. Mocked lights
+  default to `type: 1` (tunable white) with a `detail.minColorTemp`/`maxColorTemp`
+  pair, so the `fixture_type`/color-temp-range plumbing has real read-all fixtures to
+  exercise; the test fixture set also includes a `type: 0` (single-color, no color
+  temp fields) light to confirm that case classifies and translates correctly.
 - Integration tests run the same round-trip suite already planned for gen1_2/gen3
   (`update()`, `light()`/`fan()`/`away()`/`reboot()`/`factory_reset()`), plus new
   `light_fixture()` against each configured light, `identify` kwarg handling, and
@@ -271,8 +303,11 @@ Currently assumes `/mf` + `/config-read` unconditionally. Changes:
 ### 7. Testing
 
 - Unit tests for `gen4.py`'s pure translation functions: fixture-array classification
-  by type, canonical-dict round-tripping in both directions, brightness scale
-  conversion at the boundaries (1, 100, 1, 10000).
+  by type (including an unrecognized type being ignored rather than erroring),
+  canonical-dict round-tripping in both directions, brightness scale conversion at
+  the boundaries (1, 100, 1, 10000), and `Light.fixture_type`/
+  `min_color_temp_kelvin`/`max_color_temp_kelvin` populating from a fixture's
+  `detail` when present and defaulting to `None` when absent.
 - `test_aiomodernforms.py` gains a Gen4 fixture set (`/device` and `/fixture`
   read-all responses, including variants with 0, 1, and 3 light fixtures) exercising:
   `update()` populating `State`/`Info`/`generation`/`light_fixtures` correctly for
@@ -289,6 +324,16 @@ Currently assumes `/mf` + `/config-read` unconditionally. Changes:
 - `decommission()`, RF pairing, and schedules on Gen4 — no confirmed mapping exists.
 - The Gen4 `Configure`-action tuning fields (`dimmingCurve`, `onRate`, `offRate`,
   `dimToWarm`, `dimMode`) — install-time settings, not runtime control.
+- RGBW lights (fixture `type == 2`) — no known Modern Forms fan model has one; only
+  `on`/`brightness` would be captured for such a fixture today, no RGB fields.
+- Non-fan WAC IoT fixture/product types (motorized trackhead, ELV, wall station, 24V
+  controller, and the Ventrix/ColorScaping/InvisiLED/WAC Home Gateway product lines),
+  and the `/group`/`/automation`/`/network`/`/ota`/`/remote`/`/input`/`/fs`/
+  `/integration`/`/debug` endpoints — a general WAC IoT client is a substantially
+  larger effort than fan support and belongs in its own future spec once there's an
+  actual consumer for it. The `/fixture` classification code in this design is
+  written generically enough (dispatch on numeric `type`) not to block that later,
+  but no such support is implemented now.
 - mDNS/Bonjour discovery (consistent with prior specs).
 - Validating against real Gen4 hardware — this design is built from the PDF spec
   plus one unverified third-party reverse-engineering effort; real-hardware
