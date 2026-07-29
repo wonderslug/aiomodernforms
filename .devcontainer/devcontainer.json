@@ -9,6 +9,27 @@
       "redhat.vscode-yaml",
       "esbenp.prettier-vscode"
     ],
+    "containerEnv": {
+        "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/github-cli:1": {},
+        "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+    },
+	"mounts": [
+		"source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",
+		"source=${localEnv:HOME}/.claude.json,target=/home/vscode/.claude.json,type=bind",
+		"source=${localEnv:HOME}/.claude,target=${localEnv:HOME}/.claude,type=bind",
+		"source=${localEnv:HOME}/.claude.json,target=${localEnv:HOME}/.claude.json,type=bind"
+	],
+	// The default bind mount of the local repo folder rides on the host's
+	// "fakeowner" FUSE shim, which rejects git's O_CREAT|O_EXCL object-write
+	// pattern (`insufficient permission for adding an object to repository
+	// database`). A named volume avoids that shim entirely. The volume
+	// starts empty, so onCreateCommand below clones the repo into it.
+	"workspaceMount": "source=aiomodernforms-workspace,target=/workspaces/aiomodernforms,type=volume",
+	"workspaceFolder": "/workspaces/aiomodernforms",
+	"onCreateCommand": "test -d /workspaces/aiomodernforms/.git || git clone git@github.com:wonderslug/aiomodernforms.git /workspaces/aiomodernforms",
     "settings": {
 		"terminal.integrated.shell.linux": "/bin/bash",
 		"python.pythonPath": "/usr/local/bin/python",
