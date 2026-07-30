@@ -12,6 +12,12 @@ from aiomodernforms.const import (
     COMMAND_FACTORY_RESET,
     COMMAND_QUERY_STATIC_DATA,
     COMMAND_REBOOT,
+    GEN4_DEVICE_HARD_FACTORY_RESET,
+    GEN4_FIELD_ACTION,
+    GEN4_FIELD_ADDR,
+    GEN4_FIELD_FIXTURE_LIST,
+    GEN4_FIELD_STATE,
+    GEN4_FIXTURE_ACTION_CONTROL,
     INFO_BRAND,
     INFO_CLIENT_ID,
     INFO_DATE_CODE,
@@ -27,8 +33,10 @@ from aiomodernforms.const import (
     INFO_OWNER,
     INFO_PRODUCT_SKU,
     INFO_PRODUCTION_LOT_NUMBER,
+    STATE_AWAY_MODE,
 )
 
+from .gen4 import Gen4FanState, device_data
 from .generations import GenerationProfile
 from .state import FanState
 
@@ -40,6 +48,18 @@ DISCONNECT_HOLD_SECS = 300
 DEVICE_NAME = "Mock Fan"
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _unresponsive_after(
+    loop: asyncio.AbstractEventLoop, resume_delay_secs: float
+) -> float:
+    """Return the loop-time deadline after which a fan resumes responding."""
+    return loop.time() + resume_delay_secs
+
+
+async def _hold_connection() -> None:
+    """Hold a connection open long enough to look disconnected to any client."""
+    await asyncio.sleep(DISCONNECT_HOLD_SECS)
 
 
 def _static_info(profile: GenerationProfile, light: bool) -> dict[str, object]:
@@ -88,6 +108,16 @@ class MockFan:
         self.unresponsive_until: float = 0.0
 
 
+class MockGen4Fan:
+    """Holds a mock Gen4 fan's fixture state and its simulated-disconnect window."""
+
+    def __init__(self, lights: int, resume_delay_secs: float) -> None:
+        """Initialize Gen4 fixture state for the given light count."""
+        self.state = Gen4FanState(lights=lights)
+        self.resume_delay_secs = resume_delay_secs
+        self.unresponsive_until: float = 0.0
+
+
 async def _handle_mf(request: web.Request) -> web.Response:
     """Handle POST /mf: static info queries, state queries, and commands."""
     fan: MockFan = request.app["fan"]
@@ -98,7 +128,7 @@ async def _handle_mf(request: web.Request) -> web.Response:
             "request received while unresponsive (simulated disconnect) —"
             " holding connection"
         )
-        await asyncio.sleep(DISCONNECT_HOLD_SECS)
+        await _hold_connection()
 
     commands = await request.json()
 
@@ -120,11 +150,11 @@ async def _handle_mf(request: web.Request) -> web.Response:
             fan.state.reset()
         else:
             trigger = "reboot"
-        fan.unresponsive_until = loop.time() + fan.resume_delay_secs
+        fan.unresponsive_until = _unresponsive_after(loop, fan.resume_delay_secs)
         _LOGGER.info(
             "%s received — disconnecting for %.1fs", trigger, fan.resume_delay_secs
         )
-        await asyncio.sleep(DISCONNECT_HOLD_SECS)
+        await _hold_connection()
 
     before = fan.state.snapshot()
     shadow = fan.state.apply_commands(commands)
@@ -143,6 +173,92 @@ async def _handle_config_read(request: web.Request) -> web.Response:
     return web.json_response(fan.profile.config_read_response)
 
 
+async def _handle_device(request: web.Request) -> web.Response:
+    """Handle POST /device: query/awayModeEnabled, reboot, hardFactoryReset."""
+    fan: MockGen4Fan = request.app["gen4_fan"]
+    loop = asyncio.get_running_loop()
+
+    if loop.time() < fan.unresponsive_until:
+        _LOGGER.info(
+            "request received while unresponsive (simulated disconnect) —"
+            " holding connection"
+        )
+        await _hold_connection()
+
+    body = await request.json()
+
+    if body.get(GEN4_DEVICE_HARD_FACTORY_RESET) or body.get(COMMAND_REBOOT):
+        if body.get(GEN4_DEVICE_HARD_FACTORY_RESET):
+            trigger = "hardFactoryReset"
+            fan.state.reset()
+        else:
+            trigger = "reboot"
+        fan.unresponsive_until = _unresponsive_after(loop, fan.resume_delay_secs)
+        _LOGGER.info(
+            "%s received — disconnecting for %.1fs", trigger, fan.resume_delay_secs
+        )
+        await _hold_connection()
+
+    if isinstance(body.get(STATE_AWAY_MODE), bool):
+        fan.state.away_mode_enabled = body[STATE_AWAY_MODE]
+
+    return web.json_response(device_data(fan.state.away_mode_enabled))
+
+
+async def _handle_fixture(request: web.Request) -> web.Response:
+    """Handle POST /fixture: read-all, read-one, and control."""
+    fan: MockGen4Fan = request.app["gen4_fan"]
+    loop = asyncio.get_running_loop()
+
+    if loop.time() < fan.unresponsive_until:
+        _LOGGER.info(
+            "request received while unresponsive (simulated disconnect) —"
+            " holding connection"
+        )
+        await _hold_connection()
+
+    body = await request.json()
+    action = body.get(GEN4_FIELD_ACTION)
+    addr = body.get(GEN4_FIELD_ADDR)
+
+    # Any action value other than GEN4_FIXTURE_ACTION_CONTROL (in practice
+    # always the documented "read" action, 3) falls through to the read
+    # branches below — hence no read-action constant is imported here.
+    if action == GEN4_FIXTURE_ACTION_CONTROL and addr is not None:
+        fixture = fan.state.find(addr)
+        if fixture is None:
+            return web.json_response(
+                {GEN4_FIELD_ACTION: action, "result": "-2"}, status=400
+            )
+        changed = fixture.apply_commands(body.get(GEN4_FIELD_STATE, {}))
+        _LOGGER.info("fixture %s applied changes: %s", addr, changed)
+        return web.json_response(
+            {GEN4_FIELD_ACTION: action, "result": "0", GEN4_FIELD_STATE: changed}
+        )
+
+    if addr is not None:
+        fixture = fan.state.find(addr)
+        if fixture is None:
+            return web.json_response(
+                {GEN4_FIELD_ACTION: action, "result": "-2"}, status=400
+            )
+        _LOGGER.info("fixture %s read request", addr)
+        return web.json_response(
+            {GEN4_FIELD_ACTION: action, "result": "0", **fixture.as_wire_dict()}
+        )
+
+    fixtures = fan.state.all_fixtures()
+    _LOGGER.info("fixture read-all request (%d fixtures)", len(fixtures))
+    return web.json_response(
+        {
+            GEN4_FIELD_ACTION: action,
+            "result": "0",
+            "count": len(fixtures),
+            GEN4_FIELD_FIXTURE_LIST: [f.as_wire_dict() for f in fixtures],
+        }
+    )
+
+
 def create_app(
     profile: GenerationProfile,
     breeze: bool,
@@ -154,4 +270,15 @@ def create_app(
     app["fan"] = MockFan(profile, breeze, resume_delay_secs, light=light)
     app.router.add_post("/mf", _handle_mf)
     app.router.add_post("/config-read", _handle_config_read)
+    return app
+
+
+def create_gen4_app(
+    lights: int = 1, resume_delay_secs: float = 5.0
+) -> web.Application:
+    """Build the aiohttp application for a mock Gen4 fan."""
+    app = web.Application()
+    app["gen4_fan"] = MockGen4Fan(lights=lights, resume_delay_secs=resume_delay_secs)
+    app.router.add_post("/device", _handle_device)
+    app.router.add_post("/fixture", _handle_fixture)
     return app

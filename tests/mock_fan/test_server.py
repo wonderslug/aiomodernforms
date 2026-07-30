@@ -9,7 +9,7 @@ from aiohttp.test_utils import TestClient, TestServer
 import aiomodernforms
 from aiomodernforms.const import FAN_DIRECTION_REVERSE
 from mock_fan.generations import GEN1_2, GEN3
-from mock_fan.server import create_app
+from mock_fan.server import create_app, create_gen4_app
 
 
 @pytest.mark.asyncio
@@ -240,3 +240,139 @@ async def test_light_disabled_ignores_light_commands():
             await device.light(on=True, brightness=75)
             assert device.status.light_on is False
             assert device.status.light_brightness == 100
+
+
+@pytest.mark.asyncio
+async def test_gen4_update_populates_info_and_state():
+    """update() against a mock Gen4 fan populates State/Info/generation correctly."""
+    app = create_gen4_app(lights=1)
+    async with TestClient(TestServer(app)) as client:
+        async with aiomodernforms.ModernFormsDevice(
+            client.host, port=client.port, session=client.session
+        ) as device:
+            await device.update()
+            assert device.status.fan_on is False
+            assert device.status.fan_speed == 3
+            assert len(device.status.light_fixtures) == 1
+            assert device.has_adaptive_learning() is False
+            assert device.has_sleep_timer() is False
+            assert device.has_identify() is True
+
+
+@pytest.mark.asyncio
+async def test_gen4_zero_lights():
+    """A Gen4 mock fan with lights=0 reports no light fixtures."""
+    app = create_gen4_app(lights=0)
+    async with TestClient(TestServer(app)) as client:
+        async with aiomodernforms.ModernFormsDevice(
+            client.host, port=client.port, session=client.session
+        ) as device:
+            await device.update()
+            assert device.status.light_fixtures == []
+
+
+@pytest.mark.asyncio
+async def test_gen4_multiple_lights():
+    """A Gen4 mock fan with lights=3 exposes three independently addressable lights."""
+    app = create_gen4_app(lights=3)
+    async with TestClient(TestServer(app)) as client:
+        async with aiomodernforms.ModernFormsDevice(
+            client.host, port=client.port, session=client.session
+        ) as device:
+            await device.update()
+            assert len(device.status.light_fixtures) == 3
+
+            second_light_addr = device.status.light_fixtures[1].address
+            await device.light_fixture(second_light_addr, on=True, brightness=80)
+            assert device.status.light_fixtures[1].on is True
+            assert device.status.light_fixtures[1].brightness == 80
+            # The other lights are untouched.
+            assert device.status.light_fixtures[0].on is False
+            assert device.status.light_fixtures[2].on is False
+
+
+@pytest.mark.asyncio
+async def test_gen4_fan_and_light_round_trip():
+    """fan()/light() commands round-trip through the mock Gen4 fan."""
+    app = create_gen4_app(lights=1)
+    async with TestClient(TestServer(app)) as client:
+        async with aiomodernforms.ModernFormsDevice(
+            client.host, port=client.port, session=client.session
+        ) as device:
+            await device.update()
+            await device.fan(on=True, speed=5, direction=FAN_DIRECTION_REVERSE)
+            assert device.status.fan_on is True
+            assert device.status.fan_speed == 5
+            assert device.status.fan_direction == FAN_DIRECTION_REVERSE
+
+            await device.light(on=True, brightness=75)
+            assert device.status.light_on is True
+            assert device.status.light_brightness == 75
+
+
+@pytest.mark.asyncio
+async def test_gen4_away_round_trip():
+    """away() round-trips through the mock Gen4 fan's /device endpoint."""
+    app = create_gen4_app(lights=0)
+    async with TestClient(TestServer(app)) as client:
+        async with aiomodernforms.ModernFormsDevice(
+            client.host, port=client.port, session=client.session
+        ) as device:
+            await device.update()
+            await device.away(True)
+            assert device.status.away_mode_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_gen4_unsupported_methods_raise():
+    """decommission/pairing/schedule raise ModernFormsNotSupportedError on mock Gen4."""
+    app = create_gen4_app(lights=0)
+    async with TestClient(TestServer(app)) as client:
+        async with aiomodernforms.ModernFormsDevice(
+            client.host, port=client.port, session=client.session
+        ) as device:
+            await device.update()
+            with pytest.raises(aiomodernforms.ModernFormsNotSupportedError):
+                await device.decommission()
+
+
+@pytest.mark.asyncio
+async def test_gen4_reboot_disconnects_then_resumes():
+    """reboot() against a mock Gen4 fan times out (swallowed), then resumes."""
+    app = create_gen4_app(lights=0, resume_delay_secs=0.05)
+    async with TestClient(TestServer(app)) as client:
+        async with aiomodernforms.ModernFormsDevice(
+            client.host,
+            port=client.port,
+            session=client.session,
+            request_timeout=0.2,
+        ) as device:
+            await device.update()
+            await device.reboot()  # must not raise; timeout is swallowed
+
+            await asyncio.sleep(0.1)
+            await device.update()  # must succeed again after resume delay
+            assert device.status.fan_on is False
+
+
+@pytest.mark.asyncio
+async def test_gen4_factory_reset_resets_state():
+    """factory_reset() resets the mock Gen4 fan's fixtures to startup defaults."""
+    app = create_gen4_app(lights=0, resume_delay_secs=0.05)
+    async with TestClient(TestServer(app)) as client:
+        async with aiomodernforms.ModernFormsDevice(
+            client.host,
+            port=client.port,
+            session=client.session,
+            request_timeout=0.2,
+        ) as device:
+            await device.update()
+            await device.fan(on=True, speed=6)
+            assert device.status.fan_on is True
+
+            await device.factory_reset()  # must not raise
+
+            await asyncio.sleep(0.1)
+            await device.update()
+            assert device.status.fan_on is False
+            assert device.status.fan_speed == 3
