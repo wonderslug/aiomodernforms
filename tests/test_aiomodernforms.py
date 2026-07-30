@@ -1322,6 +1322,148 @@ async def test_fan_gen4_sleep_is_a_silent_noop(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_light_gen4_sends_to_primary_fixture(aresponses):
+    """Test that light() on Gen4 controls light_fixtures[0]'s real address."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["addr"] == 83951616
+        assert data["state"] == {"status": True, "level": 8000}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(
+                {"action": 4, "result": "0", "state": {"status": True, "level": 8000}}
+            ),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(on=True, brightness=80)
+        assert device.status.light_on is True
+        assert device.status.light_brightness == 80
+        assert device.status.light_fixtures[0].on is True
+        assert device.status.light_fixtures[0].brightness == 80
+
+
+@pytest.mark.asyncio
+async def test_light_gen4_color_temp(aresponses):
+    """Test that light(color_temp_kelvin=...) sends mixColorTemp."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["state"] == {"mixColorTemp": 4500}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(
+                {"action": 4, "result": "0", "state": {"mixColorTemp": 4500}}
+            ),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(color_temp_kelvin=4500)
+        assert device.status.light_color_temp_kelvin == 4500
+
+
+@pytest.mark.asyncio
+async def test_light_color_temp_ignored_on_legacy(aresponses):
+    """Test that color_temp_kelvin is silently dropped for gen1_2/gen3."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_POWER in data
+        assert COMMAND_LIGHT_COLOR_TEMP not in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(on=True, color_temp_kelvin=4500)
+
+
+@pytest.mark.asyncio
+async def test_light_fixture_controls_a_specific_address(aresponses):
+    """Test that light_fixture() addresses a light directly, not via index 0."""
+    second_light = {**gen4_light_fixture, "addr": 83951617, "name": "Uplight"}
+    _mock_gen4_device(
+        aresponses, fixtures=[gen4_fan_fixture, gen4_light_fixture, second_light]
+    )
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["addr"] == 83951617
+        assert data["state"] == {"status": True}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps({"action": 4, "result": "0", "state": {"status": True}}),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert len(device.status.light_fixtures) == 2
+        await device.light_fixture(83951617, on=True)
+        assert device.status.light_fixtures[1].on is True
+        # The primary light (index 0) and its flat mirror fields are untouched.
+        assert device.status.light_fixtures[0].on is False
+        assert device.status.light_on is False
+
+
+@pytest.mark.asyncio
+async def test_light_fixture_none_address_routes_through_legacy(aresponses):
+    """Test that light_fixture(None, ...) works on gen1_2/gen3 like light()."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_POWER in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light_fixture(None, on=True)
+        assert device.status.light_on is True
+
+
+def test_has_identify_true_only_for_gen4():
+    """Test has_identify() reflects generation."""
+    legacy_device = Device(state_data=basic_response, info_data=basic_info)
+    gen4_device = Device(
+        state_data=basic_response, info_data=basic_info, generation=Generation.GEN4
+    )
+    assert legacy_device.has_identify() is False
+    assert gen4_device.has_identify() is True
+
+
+@pytest.mark.asyncio
 async def test_away(aresponses):
     """Test to make sure setting away mode works."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)

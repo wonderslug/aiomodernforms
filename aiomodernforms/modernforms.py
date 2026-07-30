@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import socket
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -26,6 +27,7 @@ from .const import (
     COMMAND_FAN_TIMER,
     COMMAND_IDENTIFY,
     COMMAND_LIGHT_BRIGHTNESS,
+    COMMAND_LIGHT_COLOR_TEMP,
     COMMAND_LIGHT_POWER,
     COMMAND_LIGHT_SLEEP_TIMER,
     COMMAND_LIGHT_TIMER,
@@ -57,6 +59,10 @@ from .const import (
     LIGHT_BRIGHTNESS_HIGH_VALUE,
     LIGHT_BRIGHTNESS_LOW_VALUE,
     SLEEP_TIMER_CANCEL,
+    STATE_LIGHT_BRIGHTNESS,
+    STATE_LIGHT_COLOR_TEMP,
+    STATE_LIGHT_FIXTURES,
+    STATE_LIGHT_POWER,
     WIND_SPEED_HIGH_VALUE,
     WIND_SPEED_LOW_VALUE,
 )
@@ -333,6 +339,15 @@ class ModernFormsDevice:
             )
         return self._device.has_relative_timers()
 
+    def has_identify(self):
+        """See if the Fan supports the identify/findme function (Gen4 only)."""
+        if self._device is None:
+            raise ModernFormsNotInitializedError(
+                "The device has not been initialized.  "
+                + "Please run update on the device before getting state"
+            )
+        return self._device.has_identify()
+
     def _sleep_command(
         self, epoch_command: str, relative_command: str, sleep: int | datetime
     ) -> dict[str, int]:
@@ -376,21 +391,110 @@ class ModernFormsDevice:
             state_data=full, generation=Generation.GEN4
         )
 
+    def _apply_gen4_light_change(
+        self, address: int | None, changes: dict[str, Any]
+    ) -> None:
+        """Merge a partial light-fixture state change onto the cached State (Gen4)."""
+        lights = list(self._device.state.light_fixtures)  # type: ignore[union-attr]
+        for i, light in enumerate(lights):
+            if light.address == address:
+                lights[i] = replace(
+                    light,
+                    on=changes.get(STATE_LIGHT_POWER, light.on),
+                    brightness=changes.get(STATE_LIGHT_BRIGHTNESS, light.brightness),
+                    color_temp_kelvin=changes.get(
+                        STATE_LIGHT_COLOR_TEMP, light.color_temp_kelvin
+                    ),
+                )
+                break
+
+        full = self._device.state.to_dict()  # type: ignore[union-attr]
+        full[STATE_LIGHT_FIXTURES] = lights
+        if lights and lights[0].address == address:
+            full[STATE_LIGHT_POWER] = lights[0].on
+            full[STATE_LIGHT_BRIGHTNESS] = lights[0].brightness
+            full[STATE_LIGHT_COLOR_TEMP] = lights[0].color_temp_kelvin
+        self._device.update_from_dict(  # type: ignore[union-attr]
+            state_data=full, generation=Generation.GEN4
+        )
+
     async def light(
         self,
         *,
         brightness: int | None = None,
         on: bool | None = None,
         sleep: int | datetime | None = None,
+        color_temp_kelvin: int | None = None,
+        identify: bool | None = None,
     ):
-        """Change Fans Light state.
+        """Change Fans Light state — always controls the primary light.
 
-        When both brightness and on=True are given, brightness is sent in
-        its own request first to avoid the fan briefly flashing at the
-        previous brightness. See issue #99.
+        When both brightness and on=True are given on gen1_2/gen3, brightness
+        is sent in its own request first to avoid the fan briefly flashing at
+        the previous brightness. See issue #99. Gen4's /fixture endpoint
+        applies a control request's state atomically, so this split is only
+        needed for the legacy /mf protocol.
         """
         if self._device is None:
             await self.update()
+        assert self._device is not None
+
+        address = self._device.state.light_fixtures[0].address
+
+        if brightness is not None and (
+            not isinstance(brightness, int)
+            or int(brightness) < LIGHT_BRIGHTNESS_LOW_VALUE
+            or int(brightness) > LIGHT_BRIGHTNESS_HIGH_VALUE
+        ):
+            raise ModernFormsInvalidSettingsError(
+                "brightness value must be between"
+                + f" {LIGHT_BRIGHTNESS_LOW_VALUE} and {LIGHT_BRIGHTNESS_HIGH_VALUE}"
+            )
+
+        if on is not None and not isinstance(on, bool):
+            raise ModernFormsInvalidSettingsError("on must be a boolean")
+
+        if (
+            brightness is not None
+            and on is True
+            and self._device.generation != Generation.GEN4
+        ):
+            # Setting brightness and turning on in a single request makes the
+            # fan briefly show the previous brightness before jumping to the
+            # new one. Sending brightness first avoids the flash.
+            await self.light_fixture(address, brightness=brightness)
+            await self.light_fixture(address, on=on, sleep=sleep, identify=identify)
+            return
+
+        await self.light_fixture(
+            address,
+            brightness=brightness,
+            on=on,
+            sleep=sleep,
+            color_temp_kelvin=color_temp_kelvin,
+            identify=identify,
+        )
+
+    async def light_fixture(
+        self,
+        address: int | None,
+        *,
+        brightness: int | None = None,
+        on: bool | None = None,
+        sleep: int | datetime | None = None,
+        color_temp_kelvin: int | None = None,
+        identify: bool | None = None,
+    ):
+        """Change one light fixture's state.
+
+        `address` is a value from `status.light_fixtures[*].address` — pass
+        `None` to target the gen1_2/gen3 synthetic entry (routes through the
+        legacy /mf endpoint); pass a real address to control a specific
+        Gen4 light fixture via /fixture.
+        """
+        if self._device is None:
+            await self.update()
+        assert self._device is not None
 
         if brightness is not None and (
             not isinstance(brightness, int)
@@ -406,25 +510,38 @@ class ModernFormsDevice:
             raise ModernFormsInvalidSettingsError("on must be a boolean")
 
         sleep_commands: dict[str, int] = {}
-        if sleep is not None:
+        if sleep is not None and self._device.generation != Generation.GEN4:
             sleep_commands = self._sleep_command(
                 COMMAND_LIGHT_SLEEP_TIMER, COMMAND_LIGHT_TIMER, sleep
             )
-
-        if brightness is not None and on is True:
-            # Setting brightness and turning on in a single request makes the
-            # fan briefly show the previous brightness before jumping to the
-            # new one. Sending brightness first avoids the flash.
-            await self.request(commands={COMMAND_LIGHT_BRIGHTNESS: brightness})
-            await self.request(commands={COMMAND_LIGHT_POWER: on, **sleep_commands})
-            return
 
         commands: dict[str, bool | int] = {}
         if brightness is not None:
             commands[COMMAND_LIGHT_BRIGHTNESS] = brightness
         if on is not None:
             commands[COMMAND_LIGHT_POWER] = on
+        if color_temp_kelvin is not None and self._device.generation == Generation.GEN4:
+            # Color temperature control is Gen4-only; silently drop it for
+            # gen1_2/gen3 rather than sending an unsupported /mf field.
+            commands[COMMAND_LIGHT_COLOR_TEMP] = color_temp_kelvin
+        if identify is not None:
+            commands[COMMAND_IDENTIFY] = identify
         commands.update(sleep_commands)
+
+        if self._device.generation == Generation.GEN4:
+            wire_state = gen4.build_light_control_state(commands)
+            if wire_state:
+                response = await self._request(
+                    {
+                        "action": GEN4_FIXTURE_ACTION_CONTROL,
+                        "addr": address,
+                        "state": wire_state,
+                    },
+                    path=GEN4_FIXTURE_API_ENDPOINT,
+                )
+                changes = gen4.parse_light_control_response(response.get("state", {}))
+                self._apply_gen4_light_change(address, changes)
+            return
 
         await self.request(commands=commands)
 
