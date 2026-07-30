@@ -8,7 +8,6 @@ import aiohttp
 import pytest
 
 import aiomodernforms
-from aiomodernforms.models import Device, Generation
 from aiomodernforms.const import (
     ADAPTIVE_LEARNING_ON,
     AWAY_MODE_ON,
@@ -39,6 +38,7 @@ from aiomodernforms.exceptions import (
     ModernFormsNotInitializedError,
     ModernFormsNotSupportedError,
 )
+from aiomodernforms.models import Device, Generation
 
 
 def test_not_supported_error_is_an_exception():
