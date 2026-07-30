@@ -8,6 +8,7 @@ import aiohttp
 import pytest
 
 import aiomodernforms
+from aiomodernforms.models import Device, Generation
 from aiomodernforms.const import (
     ADAPTIVE_LEARNING_ON,
     AWAY_MODE_ON,
@@ -788,6 +789,44 @@ async def test_nonupdated_device_for_relative_timers():
     with pytest.raises(ModernFormsNotInitializedError):
         async with aiomodernforms.ModernFormsDevice("fan.local") as device:
             device.has_relative_timers()
+
+
+@pytest.mark.asyncio
+async def test_generation_defaults_gen1_2(aresponses):
+    """Test that a device with no relative timers is classified gen1_2."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device._device.generation == Generation.GEN1_2
+        assert device._device.has_adaptive_learning() is True
+        assert device._device.has_sleep_timer() is True
+        assert device._device.has_identify() is False
+
+
+@pytest.mark.asyncio
+async def test_generation_gen3_from_relative_timers(aresponses):
+    """Test that a device with relative timers is classified gen3."""
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_info)
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device._device.generation == Generation.GEN3
+
+
+def test_device_accepts_explicit_generation():
+    """Test that Device.__init__ honors an explicitly passed generation."""
+    device = Device(
+        state_data=basic_response,
+        info_data=basic_info,
+        generation=Generation.GEN4,
+    )
+    assert device.generation == Generation.GEN4
+    assert device.has_adaptive_learning() is False
+    assert device.has_sleep_timer() is False
+    assert device.has_identify() is True
 
 
 @pytest.mark.asyncio

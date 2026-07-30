@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 from .const import (
@@ -55,6 +56,14 @@ from .const import (
     STATE_WIND_POWER,
     STATE_WIND_SPEED,
 )
+
+
+class Generation(str, Enum):
+    """Which wire protocol a Modern Forms fan speaks."""
+
+    GEN1_2 = "gen1_2"
+    GEN3 = "gen3"
+    GEN4 = "gen4"
 
 
 @dataclass
@@ -196,22 +205,46 @@ class State:
         )
 
 
+def _infer_generation(state_data: dict[str, Any]) -> Generation:
+    """Infer gen1_2 vs gen3 from whether relative timer keys are present.
+
+    Only called when no explicit generation is passed to update_from_dict()
+    — Gen4 always passes one explicitly, since Gen4 detection happens via
+    the /device endpoint before any state dict exists to infer from.
+    """
+    if STATE_FAN_TIMER in state_data or STATE_LIGHT_TIMER in state_data:
+        return Generation.GEN3
+    return Generation.GEN1_2
+
+
 class Device:
     """Object holding all information of Modern Forms Device."""
 
     info: Info
     state: State
+    generation: Generation
 
-    def __init__(self, state_data: dict, info_data: dict):
+    def __init__(
+        self,
+        state_data: dict,
+        info_data: dict,
+        generation: Generation | None = None,
+    ):
         """Initialize an empty Modern Forms device class."""
-        self.update_from_dict(state_data=state_data, info_data=info_data)
+        self.update_from_dict(
+            state_data=state_data, info_data=info_data, generation=generation
+        )
 
     def update_from_dict(
-        self, state_data: dict | None = None, info_data: dict | None = None
+        self,
+        state_data: dict | None = None,
+        info_data: dict | None = None,
+        generation: Generation | None = None,
     ) -> Device:
         """Update the device status with the passed dict."""
         if state_data is not None:
             self.state = State.from_dict(state_data)
+            self.generation = generation or _infer_generation(state_data)
         if info_data is not None:
             self.info = Info.from_dict(info_data)
         return self
@@ -222,4 +255,16 @@ class Device:
 
     def has_relative_timers(self) -> bool:
         """See if the Fan uses relative (seconds-until-off) sleep timers."""
-        return self.state.fan_timer is not None or self.state.light_timer is not None
+        return self.generation == Generation.GEN3
+
+    def has_adaptive_learning(self) -> bool:
+        """See if the Fan supports adaptive learning (not available on Gen4)."""
+        return self.generation != Generation.GEN4
+
+    def has_sleep_timer(self) -> bool:
+        """See if the Fan supports sleep timers at all (not available on Gen4)."""
+        return self.generation != Generation.GEN4
+
+    def has_identify(self) -> bool:
+        """See if the Fan supports the identify/findme function (Gen4 only)."""
+        return self.generation == Generation.GEN4
