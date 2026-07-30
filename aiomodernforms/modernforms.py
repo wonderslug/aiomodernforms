@@ -182,7 +182,13 @@ class ModernFormsDevice:
             device_data = await self._request(
                 {GEN4_DEVICE_QUERY: True}, path=GEN4_DEVICE_API_ENDPOINT
             )
-        except ModernFormsError:
+        except (ModernFormsError, aiohttp.ClientError):
+            # Best-effort probe: a non-JSON body (HTML error page, captive
+            # portal, any non-fan device on this host) raises aiohttp's own
+            # exception from response.json() rather than a library one,
+            # since that call sits outside _request()'s normal
+            # aiohttp.ClientError-to-ModernFormsError translation. Either
+            # failure just means "not confirmed Gen4" here.
             return None
         system_type = device_data.get(GEN4_DEVICE_SYSTEM_TYPE, "")
         if gen4.is_gen4_system_type(system_type):
@@ -496,6 +502,14 @@ class ModernFormsDevice:
         if on is not None and not isinstance(on, bool):
             raise ModernFormsInvalidSettingsError("on must be a boolean")
 
+        if sleep is not None and self._device.generation != Generation.GEN4:
+            # Validate up front, before any request is sent below — the
+            # brightness+on branch just below can send a brightness-only
+            # request before ever reaching light_fixture()'s own sleep
+            # validation, which would otherwise leave the device
+            # half-mutated if `sleep` turns out to be invalid.
+            self._sleep_command(COMMAND_LIGHT_SLEEP_TIMER, COMMAND_LIGHT_TIMER, sleep)
+
         if (
             brightness is not None
             and on is True
@@ -566,7 +580,7 @@ class ModernFormsDevice:
             # Color temperature control is Gen4-only; silently drop it for
             # gen1_2/gen3 rather than sending an unsupported /mf field.
             commands[COMMAND_LIGHT_COLOR_TEMP] = color_temp_kelvin
-        if identify is not None:
+        if identify is not None and self._device.generation == Generation.GEN4:
             commands[COMMAND_IDENTIFY] = identify
         commands.update(sleep_commands)
 
@@ -660,7 +674,11 @@ class ModernFormsDevice:
                     raise ModernFormsInvalidSettingsError("wind must be a boolean")
                 commands[COMMAND_WIND] = wind
 
-        if identify is not None:
+        if (
+            identify is not None
+            and self._device is not None
+            and self._device.generation == Generation.GEN4
+        ):
             commands[COMMAND_IDENTIFY] = identify
 
         if self._device is not None and self._device.generation == Generation.GEN4:
@@ -743,11 +761,10 @@ class ModernFormsDevice:
         the immediate/no-response hardFactoryReset variant, matching the
         same connection-drop behavior as Gen 1/2/3.
         """
-        if self._device is None:
-            await self.update()
-        assert self._device is not None
-
         try:
+            if self._device is None:
+                await self.update()
+            assert self._device is not None
             if self._device.generation == Generation.GEN4:
                 await self._request(
                     {GEN4_DEVICE_HARD_FACTORY_RESET: True},
@@ -756,22 +773,26 @@ class ModernFormsDevice:
             else:
                 await self.request(commands={COMMAND_FACTORY_RESET: True})
         except ModernFormsConnectionTimeoutError:
-            # a successful factory reset drops the connection
+            # a successful factory reset drops the connection (this also
+            # covers a timeout during the implicit update() above, on a
+            # device that has never been reached before)
             pass
 
     async def decommission(self):
         """Decommission the fan from the cloud and return it to AP mode."""
-        if self._device is None:
-            await self.update()
-        assert self._device is not None
-        if self._device.generation == Generation.GEN4:
-            raise ModernFormsNotSupportedError(
-                "decommission() is not supported on Gen4 fans"
-            )
         try:
+            if self._device is None:
+                await self.update()
+            assert self._device is not None
+            if self._device.generation == Generation.GEN4:
+                raise ModernFormsNotSupportedError(
+                    "decommission() is not supported on Gen4 fans"
+                )
             await self.request(commands={COMMAND_DECOMMISSION: True})
         except ModernFormsConnectionTimeoutError:
-            # a successful decommission drops the connection
+            # a successful decommission drops the connection (this also
+            # covers a timeout during the implicit update() above, on a
+            # device that has never been reached before)
             pass
 
     async def set_schedule(self, data: str):
@@ -787,11 +808,10 @@ class ModernFormsDevice:
 
     async def reboot(self):
         """Send a reboot to the Fan."""
-        if self._device is None:
-            await self.update()
-        assert self._device is not None
-
         try:
+            if self._device is None:
+                await self.update()
+            assert self._device is not None
             if self._device.generation == Generation.GEN4:
                 await self._request(
                     {COMMAND_REBOOT: True}, path=GEN4_DEVICE_API_ENDPOINT
@@ -799,7 +819,9 @@ class ModernFormsDevice:
             else:
                 await self.request(commands={COMMAND_REBOOT: True})
         except ModernFormsConnectionTimeoutError:
-            # a successful reboot drops the connection
+            # a successful reboot drops the connection (this also covers a
+            # timeout during the implicit update() above, on a device that
+            # has never been reached before)
             pass
 
     async def close(self) -> None:

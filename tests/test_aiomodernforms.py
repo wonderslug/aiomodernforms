@@ -337,6 +337,39 @@ async def test_update_reraises_legacy_error_when_device_also_not_gen4(aresponses
 
 
 @pytest.mark.asyncio
+async def test_update_probe_handles_non_json_response(aresponses):
+    """Test that a non-JSON 200 response from /device doesn't crash update().
+
+    Regression test: _probe_gen4() only caught ModernFormsError, but the
+    `await response.json()` call in _request() sits outside the
+    aiohttp.ClientError-to-ModernFormsError translation — so a device that
+    answers `POST /device` with HTTP 200 and a non-JSON body (an HTML
+    error page, a captive portal, any non-fan device at this host) used to
+    raise a raw aiohttp.ContentTypeError straight out of update(), instead
+    of falling through to the original /mf error like every other probe
+    failure.
+    """
+    aresponses.add(
+        "fan.local",
+        "/mf",
+        "POST",
+        response=aresponses.Response(text="not found", status=404),
+    )
+    aresponses.add(
+        "fan.local",
+        "/device",
+        "POST",
+        response=aresponses.Response(
+            text="<html>captive portal</html>", status=200, content_type="text/html"
+        ),
+    )
+
+    with pytest.raises(aiomodernforms.ModernFormsError):
+        async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+            await device.update()
+
+
+@pytest.mark.asyncio
 async def test_update_only_probes_gen4_once(aresponses):
     """Test that a second update() call skips straight to /device + /fixture."""
     _mock_gen4_device(aresponses)
@@ -580,9 +613,9 @@ async def test_light(aresponses):
         assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER in data
         assert aiomodernforms.COMMAND_LIGHT_BRIGHTNESS not in data
         modified_response = basic_response.copy()
-        modified_response[STATE_LIGHT_BRIGHTNESS] = (
-            aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
-        )
+        modified_response[
+            STATE_LIGHT_BRIGHTNESS
+        ] = aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
         modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
         modified_response[STATE_LIGHT_SLEEP_TIMER] = data[
             aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER
@@ -729,9 +762,9 @@ async def test_light_on_with_brightness_no_sleep(aresponses):
         assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER not in data
         assert aiomodernforms.COMMAND_LIGHT_BRIGHTNESS not in data
         modified_response = basic_response.copy()
-        modified_response[STATE_LIGHT_BRIGHTNESS] = (
-            aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
-        )
+        modified_response[
+            STATE_LIGHT_BRIGHTNESS
+        ] = aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
         modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
         return aresponses.Response(
             status=200,
@@ -752,6 +785,29 @@ async def test_light_on_with_brightness_no_sleep(aresponses):
         assert (
             device.status.light_brightness == aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
         )
+
+
+@pytest.mark.asyncio
+async def test_light_invalid_sleep_raises_before_any_request(aresponses):
+    """Test that an invalid `sleep` value raises before any request is sent.
+
+    Regression test: light(brightness=..., on=True, sleep=<invalid>) used
+    to send the brightness-only request (from the brightness/on split
+    below) before the invalid `sleep` value was ever validated, leaving
+    the device half-mutated. Only the update() mocks are registered here
+    — if light() sent anything before raising, this test would fail with
+    a route-not-found error instead of the expected
+    ModernFormsInvalidSettingsError.
+    """
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    invalid_sleep = datetime.now() + timedelta(hours=25)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.light(brightness=50, on=True, sleep=invalid_sleep)
 
 
 @pytest.mark.asyncio
@@ -883,6 +939,37 @@ async def test_fan(aresponses):
         assert device.status.fan_speed == aiomodernforms.FAN_SPEED_HIGH_VALUE
         assert device.status.fan_direction == aiomodernforms.FAN_DIRECTION_FORWARD
         assert device.status.fan_sleep_timer == int(sleep_time.timestamp())
+
+
+@pytest.mark.asyncio
+async def test_fan_identify_ignored_on_legacy(aresponses):
+    """Test that identify is silently dropped for gen1_2/gen3, never sent.
+
+    Regression test: identify previously had no generation gate, so
+    fan(identify=True) sent {"identify": true} to /mf on legacy fans,
+    contradicting the design spec's "silently ignored otherwise" — which
+    means never sent at all, not sent-and-ignored-by-the-device.
+    """
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_FAN_POWER in data
+        assert COMMAND_IDENTIFY not in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_FAN_POWER] = data[aiomodernforms.COMMAND_FAN_POWER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.fan(on=True, identify=True)
 
 
 @pytest.mark.asyncio
@@ -1327,9 +1414,7 @@ async def test_fan_gen4_sleep_is_a_silent_noop(aresponses):
         return aresponses.Response(
             status=200,
             content_type="application/json",
-            text=json.dumps(
-                {"action": 4, "result": "0", "state": {"status": True}}
-            ),
+            text=json.dumps({"action": 4, "result": "0", "state": {"status": True}}),
         )
 
     aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
@@ -1414,6 +1499,37 @@ async def test_light_color_temp_ignored_on_legacy(aresponses):
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
         await device.update()
         await device.light(on=True, color_temp_kelvin=4500)
+
+
+@pytest.mark.asyncio
+async def test_light_identify_ignored_on_legacy(aresponses):
+    """Test that identify is silently dropped for gen1_2/gen3, never sent.
+
+    Regression test: identify previously had no generation gate, so
+    light(identify=True) sent {"identify": true} to /mf on legacy fans,
+    contradicting the design spec's "silently ignored otherwise" — which
+    means never sent at all, not sent-and-ignored-by-the-device.
+    """
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_POWER in data
+        assert COMMAND_IDENTIFY not in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(on=True, identify=True)
 
 
 @pytest.mark.asyncio
@@ -1680,6 +1796,26 @@ async def test_factory_reset(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_factory_reset_never_updated_swallows_timeout():
+    """Test factory_reset() swallows a timeout from its implicit update().
+
+    Regression test: the implicit `if self._device is None: await
+    self.update()` used to sit outside the try/except that swallows
+    ModernFormsConnectionTimeoutError (matching "a successful factory
+    reset drops the connection"), so this exact scenario used to raise
+    uncaught. No aresponses mocks are registered — update() is patched
+    directly, so no HTTP request is made at all.
+    """
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        with patch(
+            "aiomodernforms.ModernFormsDevice.update",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.factory_reset()
+        assert device._device is None
+
+
+@pytest.mark.asyncio
 async def test_factory_reset_sends_command(aresponses):
     """Test that factory_reset() sends the correct wire-level payload."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
@@ -1714,6 +1850,22 @@ async def test_decommission(aresponses):
             side_effect=ModernFormsConnectionTimeoutError,
         ):
             await device.decommission()
+
+
+@pytest.mark.asyncio
+async def test_decommission_never_updated_swallows_timeout():
+    """Test decommission() swallows a timeout from its implicit update().
+
+    See test_factory_reset_never_updated_swallows_timeout for the full
+    regression rationale — same class of bug, same fix, same convention.
+    """
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        with patch(
+            "aiomodernforms.ModernFormsDevice.update",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.decommission()
+        assert device._device is None
 
 
 @pytest.mark.asyncio
@@ -1906,6 +2058,22 @@ async def test_reboot(aresponses):
             side_effect=ModernFormsConnectionTimeoutError,
         ):
             await device.reboot()
+
+
+@pytest.mark.asyncio
+async def test_reboot_never_updated_swallows_timeout():
+    """Test reboot() swallows a timeout from its implicit update().
+
+    See test_factory_reset_never_updated_swallows_timeout for the full
+    regression rationale — same class of bug, same fix, same convention.
+    """
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        with patch(
+            "aiomodernforms.ModernFormsDevice.update",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.reboot()
+        assert device._device is None
 
 
 @pytest.mark.asyncio
