@@ -1410,7 +1410,7 @@ In `fan()`, add `identify: bool | None = None` to the signature (after `wind_spe
         wind: bool | None = None,
         wind_speed: int | None = None,
         identify: bool | None = None,
-    ):
+    ) -> None: ...
 ```
 
 Immediately before the existing `if sleep is not None:` block, change it to skip sending a timer command on Gen4:
