@@ -36,7 +36,15 @@ from aiomodernforms.exceptions import (
     ModernFormsConnectionTimeoutError,
     ModernFormsEmptyResponseError,
     ModernFormsNotInitializedError,
+    ModernFormsNotSupportedError,
 )
+
+
+def test_not_supported_error_is_an_exception():
+    """Test that ModernFormsNotSupportedError exists and is a real exception."""
+    with pytest.raises(ModernFormsNotSupportedError):
+        raise ModernFormsNotSupportedError("not supported on this generation")
+
 
 basic_response = {
     "adaptiveLearning": False,

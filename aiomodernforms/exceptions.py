@@ -9,6 +9,10 @@ class ModernFormsInvalidSettingsError(Exception):
     """Modern Forms Not InvalidSettings exception."""
 
 
+class ModernFormsNotSupportedError(Exception):
+    """Raised when a feature isn't supported on a device's generation."""
+
+
 class ModernFormsNotInitializedError(Exception):
     """Modern Forms Not InvalidSettings exception."""
 
