@@ -19,6 +19,7 @@ repos:
       - id: debug-statements
       - id: check-docstring-first
       - id: check-json
+        exclude: '^\.devcontainer/devcontainer\.json$'
       - id: check-yaml
       - id: requirements-txt-fixer
       # check-byte-order-marker and fix-encoding-pragma are non-functional

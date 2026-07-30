@@ -213,7 +213,7 @@ async def light_fixture(
     on: bool | None = None,
     color_temp_kelvin: int | None = None,
     identify: bool | None = None,
-) -> None:
+) -> None: ...
 ```
 
 Same validation bounds as `light()`. `address` is one of the values found in

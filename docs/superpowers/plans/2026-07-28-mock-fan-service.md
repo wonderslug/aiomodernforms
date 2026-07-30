@@ -82,8 +82,7 @@ def test_gen3_has_brand_and_date_code():
 def test_gen1_2_config_read_has_hardware_revision():
     """Gen 1/2 config-read data includes a hardware revision."""
     assert (
-        GEN1_2.config_read_response[CONFIG_HARDWARE_REVISION]
-        == "WAC_WINDERMIER_REV_5"
+        GEN1_2.config_read_response[CONFIG_HARDWARE_REVISION] == "WAC_WINDERMIER_REV_5"
     )
 
 
@@ -506,9 +505,7 @@ def _build_validators(
         COMMAND_LIGHT_BRIGHTNESS: _is_int_in_range(
             LIGHT_BRIGHTNESS_LOW_VALUE, LIGHT_BRIGHTNESS_HIGH_VALUE
         ),
-        COMMAND_FAN_DIRECTION: _is_one_of(
-            FAN_DIRECTION_FORWARD, FAN_DIRECTION_REVERSE
-        ),
+        COMMAND_FAN_DIRECTION: _is_one_of(FAN_DIRECTION_FORWARD, FAN_DIRECTION_REVERSE),
         COMMAND_SCHEDULE: _is_str,
     }
     if profile.uses_relative_timers:
