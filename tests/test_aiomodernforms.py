@@ -1245,6 +1245,83 @@ async def test_fan_sleep_clear(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_fan_gen4_sends_to_fixture_endpoint(aresponses):
+    """Test that fan() on a Gen4 device posts to /fixture with the real addr."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["action"] == 4
+        assert data["addr"] == 218103808
+        assert data["state"] == {"status": True, "fanSpeed": 5}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(
+                {
+                    "action": 4,
+                    "result": "0",
+                    "state": {"status": True, "fanSpeed": 5},
+                }
+            ),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.fan(on=True, speed=5)
+        assert device.status.fan_on is True
+        assert device.status.fan_speed == 5
+        # Fields not touched by this call stay at their pre-call values.
+        assert device.status.light_brightness == 50
+
+
+@pytest.mark.asyncio
+async def test_fan_gen4_identify(aresponses):
+    """Test that fan(identify=True) sends findme to the fixture."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["state"] == {"findme": True}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps({"action": 4, "result": "0", "state": {}}),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.fan(identify=True)
+
+
+@pytest.mark.asyncio
+async def test_fan_gen4_sleep_is_a_silent_noop(aresponses):
+    """Test that fan(sleep=...) on Gen4 sends no timer field at all."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["state"] == {"status": True}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(
+                {"action": 4, "result": "0", "state": {"status": True}}
+            ),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.fan(on=True, sleep=90)
+
+
+@pytest.mark.asyncio
 async def test_away(aresponses):
     """Test to make sure setting away mode works."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)

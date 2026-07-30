@@ -24,6 +24,7 @@ from .const import (
     COMMAND_FAN_SLEEP_TIMER,
     COMMAND_FAN_SPEED,
     COMMAND_FAN_TIMER,
+    COMMAND_IDENTIFY,
     COMMAND_LIGHT_BRIGHTNESS,
     COMMAND_LIGHT_POWER,
     COMMAND_LIGHT_SLEEP_TIMER,
@@ -50,6 +51,7 @@ from .const import (
     GEN4_FIELD_ACTION,
     GEN4_FIELD_ADDR,
     GEN4_FIELD_FIXTURE_LIST,
+    GEN4_FIXTURE_ACTION_CONTROL,
     GEN4_FIXTURE_ACTION_READ,
     GEN4_FIXTURE_API_ENDPOINT,
     LIGHT_BRIGHTNESS_HIGH_VALUE,
@@ -366,6 +368,14 @@ class ModernFormsDevice:
             + " seconds to sleep. 0 cancels the sleep timer."
         )
 
+    def _apply_gen4_state_change(self, changes: dict[str, Any]) -> None:
+        """Merge a partial canonical state change onto the cached State (Gen4)."""
+        full = self._device.state.to_dict()  # type: ignore[union-attr]
+        full.update(changes)
+        self._device.update_from_dict(  # type: ignore[union-attr]
+            state_data=full, generation=Generation.GEN4
+        )
+
     async def light(
         self,
         *,
@@ -427,6 +437,7 @@ class ModernFormsDevice:
         direction: str | None = None,
         wind: bool | None = None,
         wind_speed: int | None = None,
+        identify: bool | None = None,
     ):
         """Change Fans Fan state."""
         if self._device is None:
@@ -452,7 +463,11 @@ class ModernFormsDevice:
 
             commands[COMMAND_FAN_POWER] = on
 
-        if sleep is not None:
+        if (
+            sleep is not None
+            and self._device is not None
+            and self._device.generation != Generation.GEN4
+        ):
             commands.update(
                 self._sleep_command(COMMAND_FAN_SLEEP_TIMER, COMMAND_FAN_TIMER, sleep)
             )
@@ -485,6 +500,24 @@ class ModernFormsDevice:
                 if not isinstance(wind, bool):
                     raise ModernFormsInvalidSettingsError("wind must be a boolean")
                 commands[COMMAND_WIND] = wind
+
+        if identify is not None:
+            commands[COMMAND_IDENTIFY] = identify
+
+        if self._device is not None and self._device.generation == Generation.GEN4:
+            wire_state = gen4.build_fan_control_state(commands)
+            if wire_state:
+                response = await self._request(
+                    {
+                        "action": GEN4_FIXTURE_ACTION_CONTROL,
+                        "addr": self._gen4_fan_addr,
+                        "state": wire_state,
+                    },
+                    path=GEN4_FIXTURE_API_ENDPOINT,
+                )
+                changes = gen4.parse_fan_control_response(response.get("state", {}))
+                self._apply_gen4_state_change(changes)
+            return
 
         await self.request(commands=commands)
 
