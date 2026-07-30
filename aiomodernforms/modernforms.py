@@ -59,6 +59,7 @@ from .const import (
     LIGHT_BRIGHTNESS_HIGH_VALUE,
     LIGHT_BRIGHTNESS_LOW_VALUE,
     SLEEP_TIMER_CANCEL,
+    STATE_AWAY_MODE,
     STATE_LIGHT_BRIGHTNESS,
     STATE_LIGHT_COLOR_TEMP,
     STATE_LIGHT_FIXTURES,
@@ -347,6 +348,24 @@ class ModernFormsDevice:
                 + "Please run update on the device before getting state"
             )
         return self._device.has_identify()
+
+    def has_adaptive_learning(self):
+        """See if the Fan supports adaptive learning (not available on Gen4)."""
+        if self._device is None:
+            raise ModernFormsNotInitializedError(
+                "The device has not been initialized.  "
+                + "Please run update on the device before getting state"
+            )
+        return self._device.has_adaptive_learning()
+
+    def has_sleep_timer(self):
+        """See if the Fan supports sleep timers at all (not available on Gen4)."""
+        if self._device is None:
+            raise ModernFormsNotInitializedError(
+                "The device has not been initialized.  "
+                + "Please run update on the device before getting state"
+            )
+        return self._device.has_sleep_timer()
 
     def _sleep_command(
         self, epoch_command: str, relative_command: str, sleep: int | datetime
@@ -640,12 +659,30 @@ class ModernFormsDevice:
 
     async def away(self, away: bool):
         """Change the away state of the device."""
+        if self._device is None:
+            await self.update()
+
+        if self._device is not None and self._device.generation == Generation.GEN4:
+            response = await self._request(
+                {COMMAND_AWAY_MODE: away}, path=GEN4_DEVICE_API_ENDPOINT
+            )
+            self._apply_gen4_state_change(
+                {STATE_AWAY_MODE: response.get(STATE_AWAY_MODE, away)}
+            )
+            return
+
         await self.request(
             commands={COMMAND_AWAY_MODE: away, COMMAND_QUERY_STATUS: True}
         )
 
     async def adaptive_learning(self, adaptive_learning: bool):
-        """Change the adaptive learning state of the device."""
+        """Change the adaptive learning state of the device (no-op on Gen4)."""
+        if self._device is None:
+            await self.update()
+
+        if self._device is not None and self._device.generation == Generation.GEN4:
+            return
+
         await self.request(
             commands={
                 COMMAND_ADAPTIVE_LEARNING: adaptive_learning,

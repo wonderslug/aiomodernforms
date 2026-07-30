@@ -1516,6 +1516,61 @@ async def test_adaptive_learning(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_away_gen4_sends_to_device_endpoint(aresponses):
+    """Test that away() on Gen4 posts to /device, not /fixture or /mf."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data == {aiomodernforms.COMMAND_AWAY_MODE: True}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps({"awayModeEnabled": True}),
+        )
+
+    aresponses.add("fan.local", "/device", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.away(True)
+        assert device.status.away_mode_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_adaptive_learning_gen4_is_a_silent_noop(aresponses):
+    """Test that adaptive_learning() on Gen4 sends nothing and doesn't error."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.adaptive_learning(True)
+        # No aresponses mock was registered for a follow-up /device or /mf
+        # request — if adaptive_learning() sent anything, this test would
+        # fail with a route-not-found error.
+        assert device.status.adaptive_learning_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_has_adaptive_learning_and_has_sleep_timer(aresponses):
+    """Test the two new capability wrapper methods."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as gen4_device:
+        await gen4_device.update()
+        assert gen4_device.has_adaptive_learning() is False
+        assert gen4_device.has_sleep_timer() is False
+
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as legacy_device:
+        await legacy_device.update()
+        assert legacy_device.has_adaptive_learning() is True
+        assert legacy_device.has_sleep_timer() is True
+
+
+@pytest.mark.asyncio
 async def test_enable_pairing_mode(aresponses):
     """Test enabling RF pairing mode."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
