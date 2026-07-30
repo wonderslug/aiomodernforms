@@ -12,7 +12,12 @@ from typing import Any
 
 from .const import (
     COMMAND_FAN_DIRECTION,
+    COMMAND_FAN_POWER,
     COMMAND_FAN_SPEED,
+    COMMAND_IDENTIFY,
+    COMMAND_LIGHT_BRIGHTNESS,
+    COMMAND_LIGHT_COLOR_TEMP,
+    COMMAND_LIGHT_POWER,
     COMMAND_WIND,
     COMMAND_WIND_SPEED,
     DEFAULT_WIND_SPEED,
@@ -26,6 +31,8 @@ from .const import (
     GEN4_DEVICE_SCM_VER,
     GEN4_FIELD_ADDR,
     GEN4_FIELD_DETAIL,
+    GEN4_FIELD_FINDME,
+    GEN4_FIELD_LEVEL,
     GEN4_FIELD_MAX_COLOR_TEMP,
     GEN4_FIELD_MIN_COLOR_TEMP,
     GEN4_FIELD_MIX_COLOR_TEMP,
@@ -152,3 +159,73 @@ def build_info_data(device_data: dict[str, Any]) -> dict[str, Any]:
         INFO_MAIN_MCU_FIRMWARE_VERSION: device_data.get(GEN4_DEVICE_SCM_VER, ""),
         INFO_OWNER: device_data.get(GEN4_DEVICE_OWNER, ""),
     }
+
+
+def build_fan_control_state(commands: dict[str, Any]) -> dict[str, Any]:
+    """Translate a canonical fan() command dict into a Gen4 fixture state."""
+    state: dict[str, Any] = {}
+    if COMMAND_FAN_POWER in commands:
+        state[GEN4_FIELD_STATUS] = commands[COMMAND_FAN_POWER]
+    if COMMAND_FAN_SPEED in commands:
+        state[COMMAND_FAN_SPEED] = commands[COMMAND_FAN_SPEED]
+    if COMMAND_FAN_DIRECTION in commands:
+        state[COMMAND_FAN_DIRECTION] = (
+            commands[COMMAND_FAN_DIRECTION] == FAN_DIRECTION_REVERSE
+        )
+    if COMMAND_WIND in commands:
+        state[COMMAND_WIND] = commands[COMMAND_WIND]
+    if COMMAND_WIND_SPEED in commands:
+        state[COMMAND_WIND_SPEED] = commands[COMMAND_WIND_SPEED]
+    if COMMAND_IDENTIFY in commands:
+        state[GEN4_FIELD_FINDME] = commands[COMMAND_IDENTIFY]
+    return state
+
+
+def build_light_control_state(commands: dict[str, Any]) -> dict[str, Any]:
+    """Translate canonical light()/light_fixture() commands to Gen4 fixture."""
+    state: dict[str, Any] = {}
+    if COMMAND_LIGHT_POWER in commands:
+        state[GEN4_FIELD_STATUS] = commands[COMMAND_LIGHT_POWER]
+    if COMMAND_LIGHT_BRIGHTNESS in commands:
+        state[GEN4_FIELD_LEVEL] = max(
+            1, min(10000, commands[COMMAND_LIGHT_BRIGHTNESS] * GEN4_BRIGHTNESS_SCALE)
+        )
+    if COMMAND_LIGHT_COLOR_TEMP in commands:
+        state[GEN4_FIELD_MIX_COLOR_TEMP] = commands[COMMAND_LIGHT_COLOR_TEMP]
+    if COMMAND_IDENTIFY in commands:
+        state[GEN4_FIELD_FINDME] = commands[COMMAND_IDENTIFY]
+    return state
+
+
+def parse_fan_control_response(state: dict[str, Any]) -> dict[str, Any]:
+    """Translate Gen4 fan control response to canonical STATE_* keys."""
+    result: dict[str, Any] = {}
+    if GEN4_FIELD_STATUS in state:
+        result[STATE_FAN_POWER] = state[GEN4_FIELD_STATUS]
+    if COMMAND_FAN_SPEED in state:
+        result[STATE_FAN_SPEED] = state[COMMAND_FAN_SPEED]
+    if COMMAND_FAN_DIRECTION in state:
+        result[STATE_FAN_DIRECTION] = (
+            FAN_DIRECTION_REVERSE
+            if state[COMMAND_FAN_DIRECTION]
+            else FAN_DIRECTION_FORWARD
+        )
+    if COMMAND_WIND in state:
+        result[STATE_WIND_POWER] = state[COMMAND_WIND]
+    if COMMAND_WIND_SPEED in state:
+        result[STATE_WIND_SPEED] = state[COMMAND_WIND_SPEED]
+    return result
+
+
+def parse_light_control_response(state: dict[str, Any]) -> dict[str, Any]:
+    """Translate Gen4 light control response to canonical STATE_* keys."""
+    result: dict[str, Any] = {}
+    if GEN4_FIELD_STATUS in state:
+        result[STATE_LIGHT_POWER] = state[GEN4_FIELD_STATUS]
+    if GEN4_FIELD_LEVEL in state:
+        result[STATE_LIGHT_BRIGHTNESS] = max(
+            1, min(100, round(state[GEN4_FIELD_LEVEL] / GEN4_BRIGHTNESS_SCALE))
+        )
+    if GEN4_FIELD_MIX_COLOR_TEMP in state:
+        result[STATE_LIGHT_COLOR_TEMP] = state[GEN4_FIELD_MIX_COLOR_TEMP]
+    return result

@@ -12,6 +12,8 @@ from aiomodernforms import gen4
 from aiomodernforms.const import (
     ADAPTIVE_LEARNING_ON,
     AWAY_MODE_ON,
+    COMMAND_IDENTIFY,
+    COMMAND_LIGHT_COLOR_TEMP,
     COMMAND_QUERY_STATIC_DATA,
     FAN_SPEED_HIGH_VALUE,
     FAN_SPEED_LOW_VALUE,
@@ -1618,3 +1620,72 @@ def test_build_info_data_maps_device_fields():
     assert info_data[INFO_FIRMWARE_VERSION] == "01.00.0082"
     assert info_data[INFO_MAIN_MCU_FIRMWARE_VERSION] == "01.00.0012"
     assert info_data[INFO_OWNER] == "someone@somewhere.com"
+
+
+def test_build_fan_control_state_translates_all_fields():
+    """Test that a canonical fan commands dict becomes a gen4 fixture state."""
+    commands = {
+        aiomodernforms.COMMAND_FAN_POWER: True,
+        aiomodernforms.COMMAND_FAN_SPEED: 4,
+        aiomodernforms.COMMAND_FAN_DIRECTION: aiomodernforms.FAN_DIRECTION_REVERSE,
+        aiomodernforms.COMMAND_WIND: True,
+        aiomodernforms.COMMAND_WIND_SPEED: 2,
+        COMMAND_IDENTIFY: True,
+    }
+    state = gen4.build_fan_control_state(commands)
+    assert state == {
+        "status": True,
+        "fanSpeed": 4,
+        "fanDirection": True,
+        "wind": True,
+        "windSpeed": 2,
+        "findme": True,
+    }
+
+
+def test_build_fan_control_state_only_includes_given_fields():
+    """Test that fields not present in commands are omitted, not defaulted."""
+    state = gen4.build_fan_control_state({aiomodernforms.COMMAND_FAN_POWER: False})
+    assert state == {"status": False}
+
+
+def test_build_light_control_state_scales_brightness():
+    """Test that a canonical light commands dict becomes a gen4 fixture state."""
+    commands = {
+        aiomodernforms.COMMAND_LIGHT_POWER: True,
+        aiomodernforms.COMMAND_LIGHT_BRIGHTNESS: 75,
+        COMMAND_LIGHT_COLOR_TEMP: 3000,
+        COMMAND_IDENTIFY: False,
+    }
+    state = gen4.build_light_control_state(commands)
+    assert state == {
+        "status": True,
+        "level": 7500,
+        "mixColorTemp": 3000,
+        "findme": False,
+    }
+
+
+def test_parse_fan_control_response_translates_back():
+    """Test that an echoed gen4 fan state maps back to canonical STATE_* keys."""
+    result = gen4.parse_fan_control_response(
+        {"status": True, "fanSpeed": 4, "fanDirection": True, "wind": False}
+    )
+    assert result == {
+        STATE_FAN_POWER: True,
+        STATE_FAN_SPEED: 4,
+        STATE_FAN_DIRECTION: "reverse",
+        STATE_WIND_POWER: False,
+    }
+
+
+def test_parse_light_control_response_scales_brightness_back():
+    """Test that an echoed gen4 light state maps back to canonical STATE_* keys."""
+    result = gen4.parse_light_control_response(
+        {"status": True, "level": 2500, "mixColorTemp": 4000}
+    )
+    assert result == {
+        STATE_LIGHT_POWER: True,
+        STATE_LIGHT_BRIGHTNESS: 25,
+        STATE_LIGHT_COLOR_TEMP: 4000,
+    }
