@@ -123,3 +123,48 @@ CONFIG_CERTIFICATE_ID = "certificateId"
 CONFIG_WIFI_STRENGTH = "Wi-Fi strength"
 CONFIG_WIFI_STRENGTH_ALT = "WiFi"
 CONFIG_WIFI_STRENGTH_ALT2 = "wifiSignal"
+
+# --- Gen4 (WAC IoT /device + /fixture) ---
+
+GEN4_DEVICE_API_ENDPOINT = "device"
+GEN4_FIXTURE_API_ENDPOINT = "fixture"
+
+# Matched as a case-insensitive substring of a /device response's
+# "systemType" value.
+GEN4_SYSTEM_TYPE_MARKERS = ("fan_g4",)
+
+GEN4_FIXTURE_ACTION_READ = 3
+GEN4_FIXTURE_ACTION_CONTROL = 4
+
+GEN4_FIXTURE_TYPE_FAN = 13
+GEN4_LIGHT_FIXTURE_TYPES = frozenset({0, 1, 2, 14, 15})
+
+# Gen4 reports light brightness as 1-10000; this library's public API uses
+# 1-100 everywhere (matching gen1_2/gen3) — multiply/divide by this scale.
+GEN4_BRIGHTNESS_SCALE = 100
+
+GEN4_FIELD_ACTION = "action"
+GEN4_FIELD_ADDR = "addr"
+GEN4_FIELD_TYPE = "type"
+GEN4_FIELD_NAME = "name"
+GEN4_FIELD_STATE = "state"
+GEN4_FIELD_DETAIL = "detail"
+GEN4_FIELD_FIXTURE_LIST = "fixture"
+GEN4_FIELD_STATUS = "status"
+GEN4_FIELD_LEVEL = "level"
+GEN4_FIELD_MIX_COLOR_TEMP = "mixColorTemp"
+GEN4_FIELD_MIN_COLOR_TEMP = "minColorTemp"
+GEN4_FIELD_MAX_COLOR_TEMP = "maxColorTemp"
+GEN4_FIELD_FINDME = "findme"
+
+GEN4_DEVICE_QUERY = "query"
+GEN4_DEVICE_SYSTEM_TYPE = "systemType"
+GEN4_DEVICE_NAME = "deviceName"
+GEN4_DEVICE_IOTM_VER = "iotmVer"
+GEN4_DEVICE_SCM_VER = "scmVer"
+GEN4_DEVICE_OWNER = "owner"
+GEN4_DEVICE_NWK_STATE = "nwkState"
+GEN4_DEVICE_HARD_FACTORY_RESET = "hardFactoryReset"
+
+GEN4_NWK_CERTIFICATE_ID = "certificateID"
+GEN4_NWK_RSSI = "rssi"

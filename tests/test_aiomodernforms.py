@@ -8,12 +8,17 @@ import aiohttp
 import pytest
 
 import aiomodernforms
+from aiomodernforms import gen4
 from aiomodernforms.const import (
     ADAPTIVE_LEARNING_ON,
     AWAY_MODE_ON,
     COMMAND_QUERY_STATIC_DATA,
     FAN_SPEED_HIGH_VALUE,
     FAN_SPEED_LOW_VALUE,
+    INFO_DEVICE_NAME,
+    INFO_FIRMWARE_VERSION,
+    INFO_MAIN_MCU_FIRMWARE_VERSION,
+    INFO_OWNER,
     LIGHT_BRIGHTNESS_HIGH_VALUE,
     LIGHT_BRIGHTNESS_LOW_VALUE,
     STATE_ADAPTIVE_LEARNING,
@@ -24,6 +29,8 @@ from aiomodernforms.const import (
     STATE_FAN_SPEED,
     STATE_FAN_TIMER,
     STATE_LIGHT_BRIGHTNESS,
+    STATE_LIGHT_COLOR_TEMP,
+    STATE_LIGHT_FIXTURES,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
     STATE_LIGHT_TIMER,
@@ -196,6 +203,54 @@ real_gen2_wifi_signal_config_response = {
     "certificateId": "REDACTED",
     "timezone": "PST8PDT",
     "wifiSignal": "-62",
+}
+
+gen4_device_response = {
+    "systemType": "fan_g4",
+    "deviceName": "Fan",
+    "owner": "someone@somewhere.com",
+    "iotmVer": "01.00.0082",
+    "scmVer": "01.00.0012",
+    "awayModeEnabled": False,
+    "nwkState": {
+        "certificateID": "abc123certid",
+        "rssi": "-42",
+    },
+}
+
+gen4_fan_fixture = {
+    "addr": 218103808,
+    "name": "Fan",
+    "type": 13,
+    "state": {
+        "status": False,
+        "fanSpeed": 3,
+        "fanDirection": False,
+        "wind": False,
+        "windSpeed": 2,
+    },
+}
+
+gen4_light_fixture = {
+    "addr": 83951616,
+    "name": "Light",
+    "type": 1,
+    "state": {
+        "status": False,
+        "level": 5000,
+        "mixColorTemp": 3000,
+    },
+    "detail": {
+        "minColorTemp": 2700,
+        "maxColorTemp": 5000,
+    },
+}
+
+gen4_wall_station_fixture = {
+    "addr": 184549376,
+    "name": "Remote",
+    "type": 11,
+    "state": {},
 }
 
 
@@ -1487,3 +1542,79 @@ async def test_empty_response():
                 autospec=True,
             ):
                 await device.update()
+
+
+def test_is_gen4_system_type_matches():
+    """Test that the fan_g4 systemType marker is recognized."""
+    assert gen4.is_gen4_system_type("fan_g4") is True
+    assert gen4.is_gen4_system_type("FAN_G4") is True
+    assert gen4.is_gen4_system_type("gen3fan") is False
+    assert gen4.is_gen4_system_type("strut") is False
+
+
+def test_classify_fixtures_splits_fan_and_lights():
+    """Test that classify_fixtures finds the fan, the light, and ignores others."""
+    fan, lights = gen4.classify_fixtures(
+        [gen4_fan_fixture, gen4_light_fixture, gen4_wall_station_fixture]
+    )
+    assert fan == gen4_fan_fixture
+    assert lights == [gen4_light_fixture]
+
+
+def test_classify_fixtures_handles_no_lights():
+    """Test that classify_fixtures returns an empty light list when none exist."""
+    fan, lights = gen4.classify_fixtures([gen4_fan_fixture])
+    assert fan == gen4_fan_fixture
+    assert lights == []
+
+
+def test_build_state_data_maps_fan_and_light_fields():
+    """Test that build_state_data produces the canonical dict State.from_dict expects."""
+    state_data = gen4.build_state_data(
+        gen4_device_response, gen4_fan_fixture, [gen4_light_fixture]
+    )
+    assert state_data[STATE_FAN_POWER] is False
+    assert state_data[STATE_FAN_SPEED] == 3
+    assert state_data[STATE_FAN_DIRECTION] == "forward"
+    assert state_data[STATE_WIND_POWER] is False
+    assert state_data[STATE_WIND_SPEED] == 2
+    assert state_data[STATE_AWAY_MODE] is False
+    assert state_data[STATE_LIGHT_POWER] is False
+    assert state_data[STATE_LIGHT_BRIGHTNESS] == 50
+    assert state_data[STATE_LIGHT_COLOR_TEMP] == 3000
+
+    light_fixtures = state_data[STATE_LIGHT_FIXTURES]
+    assert len(light_fixtures) == 1
+    light = light_fixtures[0]
+    assert light.address == 83951616
+    assert light.fixture_type == 1
+    assert light.name == "Light"
+    assert light.min_color_temp_kelvin == 2700
+    assert light.max_color_temp_kelvin == 5000
+
+
+def test_build_state_data_reverse_direction():
+    """Test that a True fanDirection (gen4 boolean) maps to the reverse string."""
+    reversed_fan = {
+        **gen4_fan_fixture,
+        "state": {**gen4_fan_fixture["state"], "fanDirection": True},
+    }
+    state_data = gen4.build_state_data(gen4_device_response, reversed_fan, [])
+    assert state_data[STATE_FAN_DIRECTION] == "reverse"
+
+
+def test_build_state_data_no_lights_uses_synthetic_default():
+    """Test that a fan with zero light fixtures gets a sensible default light."""
+    state_data = gen4.build_state_data(gen4_device_response, gen4_fan_fixture, [])
+    assert state_data[STATE_LIGHT_FIXTURES] == []
+    assert state_data[STATE_LIGHT_POWER] is False
+    assert state_data[STATE_LIGHT_BRIGHTNESS] == 100
+
+
+def test_build_info_data_maps_device_fields():
+    """Test that build_info_data maps /device fields into canonical INFO_* keys."""
+    info_data = gen4.build_info_data(gen4_device_response)
+    assert info_data[INFO_DEVICE_NAME] == "Fan"
+    assert info_data[INFO_FIRMWARE_VERSION] == "01.00.0082"
+    assert info_data[INFO_MAIN_MCU_FIRMWARE_VERSION] == "01.00.0012"
+    assert info_data[INFO_OWNER] == "someone@somewhere.com"
