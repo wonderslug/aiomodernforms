@@ -56,6 +56,8 @@ SENSITIVE_KEYS = {
     const.CONFIG_CERTIFICATE_ID,
     const.CONFIG_NAME_LEGACY,  # config-read device name, Gen 1/2
     const.CONFIG_NAME,  # config-read device name, Gen 3
+    const.GEN4_NWK_CERTIFICATE_ID,  # nested under /device "nwkState.certificateID"
+    const.GEN4_FIELD_NAME,  # user-assigned fixture name, e.g. "Master Bedroom Light"
 }
 
 # Every key this library currently parses out of each endpoint's response.
@@ -145,16 +147,33 @@ def _redact_client_id(value: Any) -> Any:
     return REDACTED
 
 
+def _redact_value(value: Any) -> Any:
+    """Recurse into dicts/lists so nested sensitive keys are also caught."""
+    if isinstance(value, dict):
+        return redact(value)
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    return value
+
+
 def redact(raw: dict[str, Any]) -> dict[str, Any]:
-    """Return a copy of a raw API response with sensitive fields redacted."""
+    """Return a copy of a raw API response with sensitive fields redacted.
+
+    Recurses into nested dicts and lists so keys buried at any depth (e.g.
+    Gen4's certificate ID at `/device`'s `nwkState.certificateID`, or a
+    fixture's `name` inside the `/fixture` read-all response's fixture
+    list) are redacted too, not just top-level keys.
+    """
     cleaned = dict(raw)
-    for key in cleaned:
+    for key, value in cleaned.items():
         if key == const.INFO_CLIENT_ID:
-            cleaned[key] = _redact_client_id(cleaned[key])
+            cleaned[key] = _redact_client_id(value)
         elif key in SENSITIVE_KEYS:
             cleaned[key] = REDACTED
-        elif key == const.STATE_SCHEDULE and cleaned[key]:
-            cleaned[key] = f"<{len(cleaned[key])} chars, redacted>"
+        elif key == const.STATE_SCHEDULE and value:
+            cleaned[key] = f"<{len(value)} chars, redacted>"
+        else:
+            cleaned[key] = _redact_value(value)
     return cleaned
 
 
@@ -307,9 +326,7 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
                 light_fixture_on_matches(extra_light.address, target_light_fixture_on),
             )
 
-            target_light_fixture_brightness = (
-                50 if extra_light.brightness != 50 else 75
-            )
+            target_light_fixture_brightness = 50 if extra_light.brightness != 50 else 75
             await check(
                 f"light_fixture({extra_light.address}, brightness=...)",
                 fan.light_fixture(
@@ -609,7 +626,7 @@ async def _gather_gen4_report(
         out.append(f"`/fixture` read-all request failed: `{err}`")
         return out
 
-    out.append(_json_block(fixture_raw))
+    out.append(_json_block(redact(fixture_raw)))
     fixtures = fixture_raw.get(const.GEN4_FIELD_FIXTURE_LIST, [])
     out.append(
         f"\n**Discovered {len(fixtures)} fixture(s):** "
@@ -627,9 +644,9 @@ async def _gather_gen4_report(
             )
 
     fan_fixture, light_fixtures = gen4.classify_fixtures(fixtures)
-    fan._gen4_fan_addr = (  # pylint: disable=protected-access
-        fan_fixture or {}
-    ).get(const.GEN4_FIELD_ADDR)
+    fan._gen4_fan_addr = (fan_fixture or {}).get(  # pylint: disable=protected-access
+        const.GEN4_FIELD_ADDR
+    )
     state_data = gen4.build_state_data(device_raw, fan_fixture, light_fixtures)
     info_data = gen4.build_info_data(device_raw)
     fan._device = Device(  # pylint: disable=protected-access
