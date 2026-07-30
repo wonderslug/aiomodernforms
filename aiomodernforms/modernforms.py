@@ -49,7 +49,11 @@ from .const import (
     FAN_SPEED_LOW_VALUE,
     GEN4_DEVICE_API_ENDPOINT,
     GEN4_DEVICE_HARD_FACTORY_RESET,
+    GEN4_DEVICE_IOTM_VER,
+    GEN4_DEVICE_NAME,
+    GEN4_DEVICE_NWK_STATE,
     GEN4_DEVICE_QUERY,
+    GEN4_DEVICE_SCM_VER,
     GEN4_DEVICE_SYSTEM_TYPE,
     GEN4_FIELD_ACTION,
     GEN4_FIELD_ADDR,
@@ -57,6 +61,8 @@ from .const import (
     GEN4_FIXTURE_ACTION_CONTROL,
     GEN4_FIXTURE_ACTION_READ,
     GEN4_FIXTURE_API_ENDPOINT,
+    GEN4_NWK_CERTIFICATE_ID,
+    GEN4_NWK_RSSI,
     LIGHT_BRIGHTNESS_HIGH_VALUE,
     LIGHT_BRIGHTNESS_LOW_VALUE,
     SLEEP_TIMER_CANCEL,
@@ -321,6 +327,21 @@ class ModernFormsDevice:
         Includes hardware revision, RF library version, certificate ID,
         and current Wi-Fi signal strength.
         """
+        if self._device is not None and self._device.generation == Generation.GEN4:
+            device_data = await self._request(
+                {GEN4_DEVICE_QUERY: True}, path=GEN4_DEVICE_API_ENDPOINT
+            )
+            nwk_state = device_data.get(GEN4_DEVICE_NWK_STATE) or {}
+            return ConfigInfo(
+                device_name=device_data.get(GEN4_DEVICE_NAME, ""),
+                protocol="",
+                hardware_revision="",
+                firmware_version=device_data.get(GEN4_DEVICE_IOTM_VER, ""),
+                rf_version=device_data.get(GEN4_DEVICE_SCM_VER, ""),
+                certificate_id=nwk_state.get(GEN4_NWK_CERTIFICATE_ID, ""),
+                wifi_strength=str(nwk_state.get(GEN4_NWK_RSSI, "")),
+            )
+
         config_data = await self._request(commands={}, path=CONFIG_READ_API_ENDPOINT)
         return ConfigInfo.from_dict(config_data)
 

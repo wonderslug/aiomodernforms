@@ -482,6 +482,24 @@ async def test_config_uses_config_read_path(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_config_gen4(aresponses):
+    """Test config() against a Gen4 device — maps /device fields into ConfigInfo."""
+    _mock_gen4_device(aresponses)
+    aresponses.add("fan.local", "/device", "POST", response=gen4_device_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        config = await device.config()
+        assert config.device_name == "Fan"
+        assert config.firmware_version == "01.00.0082"
+        assert config.rf_version == "01.00.0012"
+        assert config.certificate_id == "abc123certid"
+        assert config.wifi_strength == "-42"
+        assert config.hardware_revision == ""
+        assert config.protocol == ""
+
+
+@pytest.mark.asyncio
 async def test_full_state_capture(aresponses):
     """Test that all documented dynamic shadow fields are captured on State."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
