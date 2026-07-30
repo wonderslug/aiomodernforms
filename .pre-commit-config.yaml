@@ -10,6 +10,14 @@ repos:
     hooks:
       - id: blacken-docs
         additional_dependencies: [black==26.5.1]
+        # Plan/spec docs intentionally contain partial Python snippets (kwarg
+        # fragments, bare-signature stubs meant to be read in surrounding
+        # context) for a human implementer, not complete standalone modules.
+        # blacken-docs flags these as needing a rewrite regardless of whether
+        # they have a real syntax error, and reformatting a fragment can
+        # silently change its meaning (e.g. a kwarg fragment becoming a tuple
+        # assignment) rather than just its style.
+        exclude: '^docs/superpowers/(plans|specs)/.*\.md$'
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

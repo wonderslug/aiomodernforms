@@ -2334,7 +2334,7 @@ Update the module docstring's list of Gen4-relevant capability flags and the `--
 
 There's no automated test suite for `diagnose.py` (it's a standalone script, consistent with its current state — it has no existing tests either). Verify manually:
 
-Run: `python -c "import diagnose"` 
+Run: `python -c "import diagnose"`
 Expected: No `ImportError`/`SyntaxError` — confirms the module at least parses and imports cleanly.
 
 Run: `python -m py_compile diagnose.py`

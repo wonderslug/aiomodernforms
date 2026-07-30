@@ -69,7 +69,7 @@ def test_gen4_fixture_apply_commands_validates_fan_speed():
     assert state.fan.state[COMMAND_FAN_SPEED] == 6
 
     changed = state.fan.apply_commands({COMMAND_FAN_SPEED: 7})
-    assert changed == {}
+    assert not changed
     assert state.fan.state[COMMAND_FAN_SPEED] == 6
 
 

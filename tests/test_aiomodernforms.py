@@ -1108,7 +1108,7 @@ def test_from_dict_respects_explicit_empty_light_fixtures():
     """
     data = {**basic_response, STATE_LIGHT_FIXTURES: []}
     state = State.from_dict(data)
-    assert state.light_fixtures == []
+    assert not state.light_fixtures
 
 
 def test_from_dict_missing_light_fixtures_key_uses_synthetic_default():
@@ -2180,7 +2180,7 @@ def test_classify_fixtures_handles_no_lights():
     """Test that classify_fixtures returns an empty light list when none exist."""
     fan, lights = gen4.classify_fixtures([gen4_fan_fixture])
     assert fan == gen4_fan_fixture
-    assert lights == []
+    assert not lights
 
 
 def test_build_state_data_maps_fan_and_light_fields():
