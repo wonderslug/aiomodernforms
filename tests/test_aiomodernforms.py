@@ -613,9 +613,9 @@ async def test_light(aresponses):
         assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER in data
         assert aiomodernforms.COMMAND_LIGHT_BRIGHTNESS not in data
         modified_response = basic_response.copy()
-        modified_response[
-            STATE_LIGHT_BRIGHTNESS
-        ] = aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
+        modified_response[STATE_LIGHT_BRIGHTNESS] = (
+            aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
+        )
         modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
         modified_response[STATE_LIGHT_SLEEP_TIMER] = data[
             aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER
@@ -762,9 +762,9 @@ async def test_light_on_with_brightness_no_sleep(aresponses):
         assert aiomodernforms.COMMAND_LIGHT_SLEEP_TIMER not in data
         assert aiomodernforms.COMMAND_LIGHT_BRIGHTNESS not in data
         modified_response = basic_response.copy()
-        modified_response[
-            STATE_LIGHT_BRIGHTNESS
-        ] = aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
+        modified_response[STATE_LIGHT_BRIGHTNESS] = (
+            aiomodernforms.LIGHT_BRIGHTNESS_HIGH_VALUE
+        )
         modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
         return aresponses.Response(
             status=200,

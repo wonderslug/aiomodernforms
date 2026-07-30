@@ -273,9 +273,7 @@ def create_app(
     return app
 
 
-def create_gen4_app(
-    lights: int = 1, resume_delay_secs: float = 5.0
-) -> web.Application:
+def create_gen4_app(lights: int = 1, resume_delay_secs: float = 5.0) -> web.Application:
     """Build the aiohttp application for a mock Gen4 fan."""
     app = web.Application()
     app["gen4_fan"] = MockGen4Fan(lights=lights, resume_delay_secs=resume_delay_secs)
