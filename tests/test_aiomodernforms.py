@@ -2068,3 +2068,51 @@ def test_parse_light_control_response_scales_brightness_back():
         STATE_LIGHT_BRIGHTNESS: 25,
         STATE_LIGHT_COLOR_TEMP: 4000,
     }
+
+
+@pytest.mark.asyncio
+async def test_reboot_gen4(aresponses):
+    """Test reboot() on Gen4 posts {"reboot": True} to /device."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with patch(
+            "aiomodernforms.ModernFormsDevice._request",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.reboot()
+
+
+@pytest.mark.asyncio
+async def test_factory_reset_gen4_sends_hard_factory_reset(aresponses):
+    """Test that factory_reset() on Gen4 sends hardFactoryReset, not factoryReset."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with patch(
+            "aiomodernforms.ModernFormsDevice._request",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ) as mock_request:
+            await device.factory_reset()
+            mock_request.assert_called_once_with(
+                {"hardFactoryReset": True}, path="device"
+            )
+
+
+@pytest.mark.asyncio
+async def test_gen4_unsupported_methods_raise(aresponses):
+    """Test that decommission/pairing/schedule raise on Gen4."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.decommission()
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.enable_pairing_mode()
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.clear_paired_devices()
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.set_schedule("AAAA")

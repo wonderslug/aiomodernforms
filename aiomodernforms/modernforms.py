@@ -48,6 +48,7 @@ from .const import (
     FAN_SPEED_HIGH_VALUE,
     FAN_SPEED_LOW_VALUE,
     GEN4_DEVICE_API_ENDPOINT,
+    GEN4_DEVICE_HARD_FACTORY_RESET,
     GEN4_DEVICE_QUERY,
     GEN4_DEVICE_SYSTEM_TYPE,
     GEN4_FIELD_ACTION,
@@ -74,6 +75,7 @@ from .exceptions import (
     ModernFormsError,
     ModernFormsInvalidSettingsError,
     ModernFormsNotInitializedError,
+    ModernFormsNotSupportedError,
 )
 from .models import ConfigInfo, Device, Generation
 
@@ -692,26 +694,59 @@ class ModernFormsDevice:
 
     async def enable_pairing_mode(self, active: bool = True):
         """Toggle RF pairing mode, used to pair remotes or wall controls."""
+        if self._device is None:
+            await self.update()
+        assert self._device is not None
+        if self._device.generation == Generation.GEN4:
+            raise ModernFormsNotSupportedError(
+                "enable_pairing_mode() is not supported on Gen4 fans"
+            )
         await self.request(commands={COMMAND_RF_PAIR_MODE: active})
 
     async def clear_paired_devices(self):
         """Clear all RF-paired devices (remotes, wall controls) from the fan."""
+        if self._device is None:
+            await self.update()
+        assert self._device is not None
+        if self._device.generation == Generation.GEN4:
+            raise ModernFormsNotSupportedError(
+                "clear_paired_devices() is not supported on Gen4 fans"
+            )
         await self.request(commands={COMMAND_RESET_RF_PAIR_LIST: True})
 
     async def factory_reset(self):
         """Reset the fan to factory defaults.
 
         Clears Wi-Fi credentials, decommissions the fan from the cloud,
-        clears RF pairings, and returns the fan to AP mode.
+        clears RF pairings, and returns the fan to AP mode. On Gen4, sends
+        the immediate/no-response hardFactoryReset variant, matching the
+        same connection-drop behavior as Gen 1/2/3.
         """
+        if self._device is None:
+            await self.update()
+        assert self._device is not None
+
         try:
-            await self.request(commands={COMMAND_FACTORY_RESET: True})
+            if self._device.generation == Generation.GEN4:
+                await self._request(
+                    {GEN4_DEVICE_HARD_FACTORY_RESET: True},
+                    path=GEN4_DEVICE_API_ENDPOINT,
+                )
+            else:
+                await self.request(commands={COMMAND_FACTORY_RESET: True})
         except ModernFormsConnectionTimeoutError:
             # a successful factory reset drops the connection
             pass
 
     async def decommission(self):
         """Decommission the fan from the cloud and return it to AP mode."""
+        if self._device is None:
+            await self.update()
+        assert self._device is not None
+        if self._device.generation == Generation.GEN4:
+            raise ModernFormsNotSupportedError(
+                "decommission() is not supported on Gen4 fans"
+            )
         try:
             await self.request(commands={COMMAND_DECOMMISSION: True})
         except ModernFormsConnectionTimeoutError:
@@ -720,12 +755,28 @@ class ModernFormsDevice:
 
     async def set_schedule(self, data: str):
         """Set the fan's base64-encoded schedule blob."""
+        if self._device is None:
+            await self.update()
+        assert self._device is not None
+        if self._device.generation == Generation.GEN4:
+            raise ModernFormsNotSupportedError(
+                "set_schedule() is not supported on Gen4 fans"
+            )
         await self.request(commands={COMMAND_SCHEDULE: data})
 
     async def reboot(self):
         """Send a reboot to the Fan."""
+        if self._device is None:
+            await self.update()
+        assert self._device is not None
+
         try:
-            await self.request(commands={COMMAND_REBOOT: True})
+            if self._device.generation == Generation.GEN4:
+                await self._request(
+                    {COMMAND_REBOOT: True}, path=GEN4_DEVICE_API_ENDPOINT
+                )
+            else:
+                await self.request(commands={COMMAND_REBOOT: True})
         except ModernFormsConnectionTimeoutError:
             # a successful reboot drops the connection
             pass
