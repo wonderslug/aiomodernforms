@@ -36,20 +36,21 @@ lint: lint-black lint-flake8 lint-pylint lint-mypy ## Run all linters.
 
 .PHONY: lint-black
 lint-black: ## Run linting using black & blacken-docs.
-	black --safe --target-version py36 aiomodernforms tests examples diagnose.py; \
+	black --safe --target-version py36 aiomodernforms mock_fan tests examples diagnose.py; \
 	blacken-docs --target-version py36
 
 .PHONY: lint-flake8
 lint-flake8: ## Run linting using flake8 (pycodestyle/pydocstyle).
-	flake8 aiomodernforms examples tests diagnose.py
+	flake8 aiomodernforms mock_fan examples tests diagnose.py
 
 .PHONY: lint-pylint
 lint-pylint: ## Run linting using PyLint.
-	pylint aiomodernforms examples tests diagnose.py
+	pylint aiomodernforms mock_fan examples tests diagnose.py
 
 .PHONY: lint-mypy
 lint-mypy: ## Run linting using MyPy.
-	mypy -p aiomodernforms
+	mypy -p aiomodernforms; \
+	mypy -p mock_fan
 
 .PHONY: diagnose
 diagnose: ## Print a redacted fan compatibility report (usage: make diagnose HOST=<ip>).
@@ -58,6 +59,14 @@ diagnose: ## Print a redacted fan compatibility report (usage: make diagnose HOS
 		exit 1; \
 	fi
 	python diagnose.py $(HOST)
+
+.PHONY: mock-fan
+mock-fan: ## Run a mock fan server (usage: make mock-fan GENERATION=gen3 [BREEZE=1] [PORT=8080]).
+	@if [ -z "$(GENERATION)" ]; then \
+		echo "Usage: make mock-fan GENERATION=<gen1_2|gen3> [BREEZE=1] [PORT=8080]"; \
+		exit 1; \
+	fi
+	python -m mock_fan --generation $(GENERATION) --port $${PORT:-8080} $(if $(BREEZE),--breeze,)
 
 .PHONY: test
 test: ## Run tests quickly with the default Python.
