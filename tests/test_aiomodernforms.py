@@ -38,7 +38,7 @@ from aiomodernforms.exceptions import (
     ModernFormsNotInitializedError,
     ModernFormsNotSupportedError,
 )
-from aiomodernforms.models import Device, Generation
+from aiomodernforms.models import Device, Generation, State
 
 
 def test_not_supported_error_is_an_exception():
@@ -814,6 +814,28 @@ async def test_generation_gen3_from_relative_timers(aresponses):
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
         await device.update()
         assert device._device.generation == Generation.GEN3
+
+
+def test_light_fixtures_synthetic_entry_for_legacy():
+    """Test that gen1_2/gen3 responses get a single synthetic Light entry."""
+    device = Device(state_data=basic_response, info_data=basic_info)
+    assert len(device.state.light_fixtures) == 1
+    light = device.state.light_fixtures[0]
+    assert light.address is None
+    assert light.fixture_type is None
+    assert light.on == basic_response["lightOn"]
+    assert light.brightness == basic_response["lightBrightness"]
+    assert light.color_temp_kelvin is None
+    assert light.min_color_temp_kelvin is None
+    assert light.max_color_temp_kelvin is None
+    assert device.state.light_color_temp_kelvin is None
+
+
+def test_state_to_dict_round_trips_through_from_dict():
+    """Test that State.to_dict() is the inverse of State.from_dict()."""
+    device = Device(state_data=gen3_relative_timer_response, info_data=gen3_info)
+    round_tripped = State.from_dict(device.state.to_dict())
+    assert round_tripped == device.state
 
 
 def test_device_accepts_explicit_generation():

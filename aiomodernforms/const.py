@@ -89,9 +89,18 @@ INFO_DATE_CODE = "dateCode"
 
 STATE_FAN_TIMER = "fanTimer"
 STATE_LIGHT_TIMER = "lightTimer"
+STATE_LIGHT_COLOR_TEMP = "lightColorTemp"
 
 COMMAND_FAN_TIMER = "fanTimer"
 COMMAND_LIGHT_TIMER = "lightTimer"
+COMMAND_LIGHT_COLOR_TEMP = "lightColorTemp"
+
+# Internal-only canonical key: never a real wire field on any generation.
+# Gen4's translation layer sets this to a pre-built list[Light]; absent for
+# gen1_2/gen3, where State.from_dict synthesizes a single-entry list itself.
+STATE_LIGHT_FIXTURES = "__lightFixtures__"
+
+COMMAND_IDENTIFY = "identify"
 
 COMMAND_RF_PAIR_MODE = "rfPairModeActive"
 COMMAND_RESET_RF_PAIR_LIST = "resetRfPairList"
