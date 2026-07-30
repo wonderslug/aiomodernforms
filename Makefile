@@ -61,12 +61,12 @@ diagnose: ## Print a redacted fan compatibility report (usage: make diagnose HOS
 	python diagnose.py $(HOST)
 
 .PHONY: mock-fan
-mock-fan: ## Run a mock fan server (usage: make mock-fan GENERATION=gen3 [BREEZE=1] [PORT=8080]).
+mock-fan: ## Run a mock fan server (usage: make mock-fan GENERATION=gen3 [BREEZE=1] [LIGHTS=2] [PORT=8080]).
 	@if [ -z "$(GENERATION)" ]; then \
-		echo "Usage: make mock-fan GENERATION=<gen1_2|gen3> [BREEZE=1] [PORT=8080]"; \
+		echo "Usage: make mock-fan GENERATION=<gen1_2|gen3|gen4> [BREEZE=1] [LIGHTS=2] [PORT=8080]"; \
 		exit 1; \
 	fi
-	python -m mock_fan --generation $(GENERATION) --port $${PORT:-8080} $(if $(BREEZE),--breeze,)
+	python -m mock_fan --generation $(GENERATION) --port $${PORT:-8080} $(if $(BREEZE),--breeze,) $(if $(LIGHTS),--lights $(LIGHTS),)
 
 .PHONY: test
 test: ## Run tests quickly with the default Python.
