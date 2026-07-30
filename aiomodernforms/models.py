@@ -228,19 +228,27 @@ class State:
             fan_timer=data.get(STATE_FAN_TIMER),
             light_timer=data.get(STATE_LIGHT_TIMER),
             light_color_temp_kelvin=data.get(STATE_LIGHT_COLOR_TEMP),
-            light_fixtures=data.get(STATE_LIGHT_FIXTURES)
-            or [
-                Light(
-                    address=None,
-                    fixture_type=None,
-                    name="",
-                    on=data.get(STATE_LIGHT_POWER, False),
-                    brightness=data.get(STATE_LIGHT_BRIGHTNESS, 100),
-                    color_temp_kelvin=data.get(STATE_LIGHT_COLOR_TEMP),
-                    min_color_temp_kelvin=None,
-                    max_color_temp_kelvin=None,
-                )
-            ],
+            # A missing key (legacy Gen 1/2/3 shadows never send one) means
+            # "build a single synthetic fixture from the flat light state
+            # fields." An explicit empty list (Gen4's read-all with zero
+            # light fixtures installed) must stay empty, so this checks for
+            # None rather than falsiness — `or` would also catch `[]`.
+            light_fixtures=(
+                data[STATE_LIGHT_FIXTURES]
+                if data.get(STATE_LIGHT_FIXTURES) is not None
+                else [
+                    Light(
+                        address=None,
+                        fixture_type=None,
+                        name="",
+                        on=data.get(STATE_LIGHT_POWER, False),
+                        brightness=data.get(STATE_LIGHT_BRIGHTNESS, 100),
+                        color_temp_kelvin=data.get(STATE_LIGHT_COLOR_TEMP),
+                        min_color_temp_kelvin=None,
+                        max_color_temp_kelvin=None,
+                    )
+                ]
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
