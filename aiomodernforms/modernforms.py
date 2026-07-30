@@ -487,6 +487,11 @@ class ModernFormsDevice:
             await self.update()
         assert self._device is not None
 
+        if not self._device.state.light_fixtures:
+            raise ModernFormsNotSupportedError(
+                "light() is not supported — this fan has no light fixtures"
+            )
+
         address = self._device.state.light_fixtures[0].address
 
         if brightness is not None and (

@@ -1482,6 +1482,25 @@ async def test_light_gen4_sends_to_primary_fixture(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_light_gen4_no_fixtures_raises_not_supported(aresponses):
+    """Test that light() raises cleanly on a Gen4 fan with no light fixtures.
+
+    Regression test: light() used to index light_fixtures[0] unconditionally,
+    which raised a bare IndexError (not a library exception) on a genuinely
+    light-less Gen4 fan — a case that became reachable once State.from_dict()
+    was fixed (commit 7049132) to respect an explicit empty light_fixtures
+    list instead of always synthesizing a placeholder entry.
+    """
+    _mock_gen4_device(aresponses, fixtures=[gen4_fan_fixture])
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.light_fixtures == []
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.light(on=True)
+
+
+@pytest.mark.asyncio
 async def test_light_gen4_color_temp(aresponses):
     """Test that light(color_temp_kelvin=...) sends mixColorTemp."""
     _mock_gen4_device(aresponses)
