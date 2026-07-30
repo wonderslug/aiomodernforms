@@ -1098,6 +1098,35 @@ def test_light_fixtures_synthetic_entry_for_legacy():
     assert device.state.light_color_temp_kelvin is None
 
 
+def test_from_dict_respects_explicit_empty_light_fixtures():
+    """Test that an explicit empty light_fixtures list is not overridden.
+
+    Regression test for commit 7049132: State.from_dict() must check for
+    `None` rather than falsiness when deciding whether to synthesize a
+    legacy light entry, since Gen4's read-all response can legitimately
+    send an explicit empty list for a fan with no light fixtures installed.
+    """
+    data = {**basic_response, STATE_LIGHT_FIXTURES: []}
+    state = State.from_dict(data)
+    assert state.light_fixtures == []
+
+
+def test_from_dict_missing_light_fixtures_key_uses_synthetic_default():
+    """Test that a missing light_fixtures key still synthesizes a legacy entry.
+
+    Companion to test_from_dict_respects_explicit_empty_light_fixtures —
+    confirms the pre-existing legacy behavior (gen1_2/gen3 responses never
+    send a light_fixtures key at all) still works after the None-check fix.
+    """
+    assert STATE_LIGHT_FIXTURES not in basic_response
+    state = State.from_dict(basic_response)
+    assert len(state.light_fixtures) == 1
+    light = state.light_fixtures[0]
+    assert light.address is None
+    assert light.on == basic_response["lightOn"]
+    assert light.brightness == basic_response["lightBrightness"]
+
+
 def test_state_to_dict_round_trips_through_from_dict():
     """Test that State.to_dict() is the inverse of State.from_dict()."""
     device = Device(state_data=gen3_relative_timer_response, info_data=gen3_info)
