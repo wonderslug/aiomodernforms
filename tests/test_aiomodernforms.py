@@ -1569,7 +1569,7 @@ def test_classify_fixtures_handles_no_lights():
 
 
 def test_build_state_data_maps_fan_and_light_fields():
-    """Test that build_state_data produces the canonical dict State.from_dict expects."""
+    """Test build_state_data's fan+light field mapping."""
     state_data = gen4.build_state_data(
         gen4_device_response, gen4_fan_fixture, [gen4_light_fixture]
     )
