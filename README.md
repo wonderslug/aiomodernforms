@@ -68,3 +68,20 @@ helps pinpoint model/generation differences. It redacts your account email,
 AWS identity, MAC address, device name, and certificate ID, and never
 includes the fan's IP address, so the output is safe to paste as-is. Still,
 give it a quick read before posting.
+
+## Mock fan for development
+
+To develop or test a client (such as a Home Assistant integration) against
+this API without real hardware, run a mock fan that speaks the same wire
+protocol:
+
+```bash
+python -m mock_fan --generation gen3 --breeze --port 8080
+# or
+make mock-fan GENERATION=gen1_2 PORT=8081
+```
+
+`--generation` is `gen1_2` or `gen3` and is required; `--breeze` optionally
+enables breeze/wind mode support; `--no-light` simulates a fan-only unit
+with no light kit (light is on by default). Point your client at the
+printed host/port exactly as you would a real fan.
