@@ -256,6 +256,111 @@ gen4_wall_station_fixture = {
 }
 
 
+def _mock_gen4_device(aresponses, fixtures=None):
+    """Register the request sequence a Gen4 device's first update() makes.
+
+    update() tries /mf first (so legacy fans need no special mocking) and
+    only falls back to probing /device when that fails — so every Gen4 test
+    must mock /mf failing first, then /device, then /fixture, in that order.
+    """
+    aresponses.add(
+        "fan.local",
+        "/mf",
+        "POST",
+        response=aresponses.Response(text="not found", status=404),
+    )
+    aresponses.add("fan.local", "/device", "POST", response=gen4_device_response)
+    fixture_list = (
+        fixtures if fixtures is not None else [gen4_fan_fixture, gen4_light_fixture]
+    )
+    aresponses.add(
+        "fan.local",
+        "/fixture",
+        "POST",
+        response={
+            "action": 3,
+            "result": "0",
+            "count": len(fixture_list),
+            "fixture": fixture_list,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_detects_gen4(aresponses):
+    """Test that update() falls back to /device and detects a Gen4 fan."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device._device.generation == Generation.GEN4
+        assert device.status.fan_speed == 3
+        assert device.status.light_brightness == 50
+        assert len(device.status.light_fixtures) == 1
+        assert device.info.device_name == "Fan"
+        assert device._gen4_fan_addr == 218103808
+
+
+@pytest.mark.asyncio
+async def test_update_uses_legacy_without_probing_device(aresponses):
+    """Test that update() never touches /device when /mf succeeds immediately."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device._device.generation == Generation.GEN1_2
+        assert device.status.fan_speed == basic_response["fanSpeed"]
+        # No /device mock was registered above — if update() had probed it,
+        # aresponses would raise a route-not-found error for that request.
+
+
+@pytest.mark.asyncio
+async def test_update_reraises_legacy_error_when_device_also_not_gen4(aresponses):
+    """Test that a device failing both /mf and /device surfaces the /mf error."""
+    aresponses.add(
+        "fan.local",
+        "/mf",
+        "POST",
+        response=aresponses.Response(text="not found", status=404),
+    )
+    aresponses.add(
+        "fan.local",
+        "/device",
+        "POST",
+        response=aresponses.Response(text="not found", status=404),
+    )
+
+    with pytest.raises(aiomodernforms.ModernFormsError):
+        async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+            await device.update()
+
+
+@pytest.mark.asyncio
+async def test_update_only_probes_gen4_once(aresponses):
+    """Test that a second update() call skips straight to /device + /fixture."""
+    _mock_gen4_device(aresponses)
+    aresponses.add("fan.local", "/device", "POST", response=gen4_device_response)
+    aresponses.add(
+        "fan.local",
+        "/fixture",
+        "POST",
+        response={
+            "action": 3,
+            "result": "0",
+            "count": 2,
+            "fixture": [gen4_fan_fixture, gen4_light_fixture],
+        },
+    )
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.update()
+        # The second update() call has no /mf mock registered and only one
+        # more /device + /fixture pair above — if it had re-attempted /mf or
+        # re-probed generation an extra time, aresponses would raise.
+
+
 @pytest.mark.asyncio
 async def test_basic_status(aresponses):
     """Test JSON response is handled correctly."""

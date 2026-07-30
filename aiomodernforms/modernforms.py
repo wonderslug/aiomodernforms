@@ -12,6 +12,7 @@ import aiohttp
 import backoff  # type: ignore
 from yarl import URL
 
+from . import gen4
 from .__version__ import __version__
 from .const import (
     COMMAND_ADAPTIVE_LEARNING,
@@ -43,6 +44,14 @@ from .const import (
     FAN_DIRECTION_REVERSE,
     FAN_SPEED_HIGH_VALUE,
     FAN_SPEED_LOW_VALUE,
+    GEN4_DEVICE_API_ENDPOINT,
+    GEN4_DEVICE_QUERY,
+    GEN4_DEVICE_SYSTEM_TYPE,
+    GEN4_FIELD_ACTION,
+    GEN4_FIELD_ADDR,
+    GEN4_FIELD_FIXTURE_LIST,
+    GEN4_FIXTURE_ACTION_READ,
+    GEN4_FIXTURE_API_ENDPOINT,
     LIGHT_BRIGHTNESS_HIGH_VALUE,
     LIGHT_BRIGHTNESS_LOW_VALUE,
     SLEEP_TIMER_CANCEL,
@@ -57,7 +66,7 @@ from .exceptions import (
     ModernFormsInvalidSettingsError,
     ModernFormsNotInitializedError,
 )
-from .models import ConfigInfo, Device
+from .models import ConfigInfo, Device, Generation
 
 
 class ModernFormsDevice:
@@ -98,11 +107,40 @@ class ModernFormsDevice:
         if self._base_path[-1] != "/":
             self._base_path += "/"
 
+        self._is_gen4: bool | None = None
+        self._gen4_fan_addr: int | None = None
+
     @backoff.on_exception(
         backoff.expo, ModernFormsEmptyResponseError, max_tries=3, logger=None
     )
     async def update(self, full_update: bool = False) -> Device:
         """Get all information about the device in a single call."""
+        if self._is_gen4:
+            await self._update_gen4(full_update=full_update)
+            return self._device  # type: ignore[return-value]
+        if self._is_gen4 is False:
+            return await self._update_legacy(full_update=full_update)
+
+        # Generation not yet known: try the long-supported /mf endpoint
+        # first (so every existing legacy fan keeps working exactly as
+        # before, with no extra request), and only probe /device for Gen4
+        # if that fails.
+        try:
+            result = await self._update_legacy(full_update=full_update)
+        except ModernFormsError:
+            device_data = await self._probe_gen4()
+            if device_data is not None:
+                self._is_gen4 = True
+                await self._update_gen4(
+                    full_update=full_update, device_data=device_data
+                )
+                return self._device  # type: ignore[return-value]
+            raise
+        self._is_gen4 = False
+        return result
+
+    async def _update_legacy(self, full_update: bool = False) -> Device:
+        """Gen 1/2/3 update() body — the flat /mf shadow protocol."""
         info_data = await self._request({COMMAND_QUERY_STATIC_DATA: True})
         state_data = await self._request()
         if not state_data:
@@ -114,6 +152,60 @@ class ModernFormsDevice:
             self._device = Device(state_data=state_data, info_data=info_data)
         self._device.update_from_dict(state_data=state_data)
         return self._device
+
+    async def _probe_gen4(self) -> dict[str, Any] | None:
+        """Fetch /device, returning its data if it identifies a Gen4 fan.
+
+        Returns the fetched device data (rather than a plain bool) so a
+        successful probe's response can be reused by _update_gen4() as
+        part of the same first-detection pass, instead of fetching /device
+        a second time.
+        """
+        try:
+            device_data = await self._request(
+                {GEN4_DEVICE_QUERY: True}, path=GEN4_DEVICE_API_ENDPOINT
+            )
+        except ModernFormsError:
+            return None
+        system_type = device_data.get(GEN4_DEVICE_SYSTEM_TYPE, "")
+        if gen4.is_gen4_system_type(system_type):
+            return device_data  # type: ignore[no-any-return]
+        return None
+
+    async def _update_gen4(
+        self,
+        full_update: bool = False,
+        device_data: dict[str, Any] | None = None,
+    ) -> None:
+        """Gen4 equivalent of _update_legacy() — the /device + /fixture protocol.
+
+        `device_data` lets a caller that already fetched /device (i.e.
+        `_probe_gen4()`, on first detection) pass it straight through
+        instead of this method fetching /device a second time.
+        """
+        if device_data is None:
+            device_data = await self._request(
+                {GEN4_DEVICE_QUERY: True}, path=GEN4_DEVICE_API_ENDPOINT
+            )
+        fixture_response = await self._request(
+            {GEN4_FIELD_ACTION: GEN4_FIXTURE_ACTION_READ},
+            path=GEN4_FIXTURE_API_ENDPOINT,
+        )
+        fixtures = fixture_response.get(GEN4_FIELD_FIXTURE_LIST, [])
+        fan_fixture, light_fixtures = gen4.classify_fixtures(fixtures)
+        self._gen4_fan_addr = (fan_fixture or {}).get(GEN4_FIELD_ADDR)
+
+        state_data = gen4.build_state_data(device_data, fan_fixture, light_fixtures)
+        info_data = gen4.build_info_data(device_data)
+
+        if self._device is None or full_update:
+            self._device = Device(
+                state_data=state_data, info_data=info_data, generation=Generation.GEN4
+            )
+        else:
+            self._device.update_from_dict(
+                state_data=state_data, generation=Generation.GEN4
+            )
 
     @backoff.on_exception(
         backoff.expo, ModernFormsConnectionError, max_tries=3, logger=None
