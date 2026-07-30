@@ -620,7 +620,12 @@ async def test_light_sleep_int(aresponses):
         await device.light(
             sleep=120,
         )
-        assert device.status.light_sleep_timer == int(sleep_time.timestamp())
+        # abs=1: the library computes its own now() + 120s independently of
+        # sleep_time above, so a second-boundary race can shift the
+        # truncated epoch by 1.
+        assert device.status.light_sleep_timer == pytest.approx(
+            int(sleep_time.timestamp()), abs=1
+        )
 
 
 @pytest.mark.asyncio
@@ -981,7 +986,12 @@ async def test_fan_sleep_int(aresponses):
         await device.fan(
             sleep=120,
         )
-        assert device.status.fan_sleep_timer == int(sleep_time.timestamp())
+        # abs=1: the library computes its own now() + 120s independently of
+        # sleep_time above, so a second-boundary race can shift the
+        # truncated epoch by 1.
+        assert device.status.fan_sleep_timer == pytest.approx(
+            int(sleep_time.timestamp()), abs=1
+        )
 
 
 @pytest.mark.asyncio
