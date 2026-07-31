@@ -302,6 +302,73 @@ async def test_update_detects_gen4(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_update_gen4_fills_missing_fixture_state_via_individual_read(
+    aresponses,
+):
+    """Test that a read-all response without `state` triggers a fallback.
+
+    Real Gen4 hardware has been observed returning only identity fields
+    (addr/type/name/model/online) from `/fixture` read-all, omitting
+    `state` entirely — unlike the PDF, which documents read-all as
+    including it (see GitHub issue #287). update() must fall back to an
+    individual read (action 3 + addr) per such fixture and merge its
+    state in, rather than treating the fixture as having no state at all.
+    """
+    aresponses.add(
+        "fan.local",
+        "/mf",
+        "POST",
+        response=aresponses.Response(text="not found", status=404),
+    )
+    aresponses.add("fan.local", "/device", "POST", response=gen4_device_response)
+
+    fan_fixture_no_state = {
+        "addr": 218103808,
+        "name": "Fan",
+        "type": 13,
+        "model": "65-3062",
+        "online": True,
+    }
+    light_fixture_no_state = {
+        "addr": 83951616,
+        "name": "Light",
+        "type": 1,
+        "model": "D-650-3062-U4R-F4",
+        "online": True,
+    }
+    aresponses.add(
+        "fan.local",
+        "/fixture",
+        "POST",
+        response={
+            "action": 3,
+            "result": "0",
+            "count": 2,
+            "fixture": [fan_fixture_no_state, light_fixture_no_state],
+        },
+    )
+    aresponses.add(
+        "fan.local",
+        "/fixture",
+        "POST",
+        response={"action": 3, "result": "0", **gen4_fan_fixture},
+    )
+    aresponses.add(
+        "fan.local",
+        "/fixture",
+        "POST",
+        response={"action": 3, "result": "0", **gen4_light_fixture},
+    )
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.fan_speed == 3
+        assert device.status.wind is False
+        assert device.status.light_brightness == 50
+        assert device.status.light_fixtures[0].min_color_temp_kelvin == 2700
+
+
+@pytest.mark.asyncio
 async def test_update_uses_legacy_without_probing_device(aresponses):
     """Test that update() never touches /device when /mf succeeds immediately."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)

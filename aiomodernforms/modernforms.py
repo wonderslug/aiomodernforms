@@ -57,7 +57,9 @@ from .const import (
     GEN4_DEVICE_SYSTEM_TYPE,
     GEN4_FIELD_ACTION,
     GEN4_FIELD_ADDR,
+    GEN4_FIELD_DETAIL,
     GEN4_FIELD_FIXTURE_LIST,
+    GEN4_FIELD_STATE,
     GEN4_FIXTURE_ACTION_CONTROL,
     GEN4_FIXTURE_ACTION_READ,
     GEN4_FIXTURE_API_ENDPOINT,
@@ -215,6 +217,7 @@ class ModernFormsDevice:
             path=GEN4_FIXTURE_API_ENDPOINT,
         )
         fixtures = fixture_response.get(GEN4_FIELD_FIXTURE_LIST, [])
+        fixtures = await self._fill_gen4_fixture_state(fixtures)
         fan_fixture, light_fixtures = gen4.classify_fixtures(fixtures)
         self._gen4_fan_addr = (fan_fixture or {}).get(GEN4_FIELD_ADDR)
 
@@ -229,6 +232,40 @@ class ModernFormsDevice:
             self._device.update_from_dict(
                 state_data=state_data, generation=Generation.GEN4
             )
+
+    async def _fill_gen4_fixture_state(
+        self, fixtures: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Fill in each fixture's `state`/`detail` via an individual read.
+
+        The PDF documents `/fixture` read-all (`action: 3`, no `addr`) as
+        returning each fixture's current `state` alongside its identity.
+        Real Gen4 hardware doesn't: read-all there returns only
+        `addr`/`type`/`name`/`model`/`online`, leaving `state` absent
+        (confirmed against a real Radiant fan, see GitHub issue #287).
+        Fixtures that already carry a `state` key are left as-is, so this
+        costs no extra requests against a device that does follow the PDF.
+        """
+        filled: list[dict[str, Any]] = []
+        for fixture in fixtures:
+            if GEN4_FIELD_STATE in fixture:
+                filled.append(fixture)
+                continue
+            addr = fixture.get(GEN4_FIELD_ADDR)
+            if addr is None:
+                filled.append(fixture)
+                continue
+            single = await self._request(
+                {GEN4_FIELD_ACTION: GEN4_FIXTURE_ACTION_READ, GEN4_FIELD_ADDR: addr},
+                path=GEN4_FIXTURE_API_ENDPOINT,
+            )
+            merged = dict(fixture)
+            if GEN4_FIELD_STATE in single:
+                merged[GEN4_FIELD_STATE] = single[GEN4_FIELD_STATE]
+            if GEN4_FIELD_DETAIL in single:
+                merged[GEN4_FIELD_DETAIL] = single[GEN4_FIELD_DETAIL]
+            filled.append(merged)
+        return filled
 
     @backoff.on_exception(
         backoff.expo, ModernFormsConnectionError, max_tries=3, logger=None
