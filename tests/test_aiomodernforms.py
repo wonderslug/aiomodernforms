@@ -1160,6 +1160,20 @@ async def test_generation_gen3_from_relative_timers(aresponses):
         assert device._device.generation == Generation.GEN3
 
 
+def test_generation_gen1_2_when_timer_keys_present_but_none():
+    """Test that None-valued timer keys don't misclassify a device as gen3.
+
+    Regression test: _infer_generation() used to check only key presence
+    (`STATE_FAN_TIMER in state_data`), not value. A dict carrying these
+    keys with an explicit None — as one built from State.to_dict() would,
+    though that path always passes an explicit generation and never
+    reaches this inference — would have been misclassified as gen3.
+    """
+    data = {**basic_response, STATE_FAN_TIMER: None, STATE_LIGHT_TIMER: None}
+    device = Device(state_data=data, info_data=basic_info)
+    assert device.generation == Generation.GEN1_2
+
+
 def test_light_fixtures_synthetic_entry_for_legacy():
     """Test that gen1_2/gen3 responses get a single synthetic Light entry."""
     device = Device(state_data=basic_response, info_data=basic_info)

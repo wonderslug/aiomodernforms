@@ -284,13 +284,22 @@ class State:
 
 
 def _infer_generation(state_data: dict[str, Any]) -> Generation:
-    """Infer gen1_2 vs gen3 from whether relative timer keys are present.
+    """Infer gen1_2 vs gen3 from whether relative timer keys have a value.
 
     Only called when no explicit generation is passed to update_from_dict()
     — Gen4 always passes one explicitly, since Gen4 detection happens via
     the /device endpoint before any state dict exists to infer from.
+
+    Checks the value rather than just key presence: a dict built from
+    State.to_dict() (as the Gen4 apply-change helpers build, though they
+    always pass an explicit generation and never reach this function)
+    always includes these keys, `None` when unset. A presence-only check
+    would misclassify such a dict as gen3.
     """
-    if STATE_FAN_TIMER in state_data or STATE_LIGHT_TIMER in state_data:
+    if (
+        state_data.get(STATE_FAN_TIMER) is not None
+        or state_data.get(STATE_LIGHT_TIMER) is not None
+    ):
         return Generation.GEN3
     return Generation.GEN1_2
 
