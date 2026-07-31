@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 from .const import (
@@ -45,6 +46,8 @@ from .const import (
     STATE_FAN_SPEED,
     STATE_FAN_TIMER,
     STATE_LIGHT_BRIGHTNESS,
+    STATE_LIGHT_COLOR_TEMP,
+    STATE_LIGHT_FIXTURES,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
     STATE_LIGHT_TIMER,
@@ -55,6 +58,14 @@ from .const import (
     STATE_WIND_POWER,
     STATE_WIND_SPEED,
 )
+
+
+class Generation(str, Enum):
+    """Which wire protocol a Modern Forms fan speaks."""
+
+    GEN1_2 = "gen1_2"
+    GEN3 = "gen3"
+    GEN4 = "gen4"
 
 
 @dataclass
@@ -147,6 +158,27 @@ class ConfigInfo:
 
 
 @dataclass
+class Light:
+    """One light fixture's state.
+
+    For gen1_2/gen3 (which have exactly one, non-addressable light), this
+    is a synthetic entry with address=None and fixture_type=None, mirroring
+    State's flat light_on/light_brightness/light_color_temp_kelvin fields.
+    For gen4, one real Light exists per light-shaped fixture the device
+    reports, with a real address usable for per-fixture control.
+    """
+
+    address: int | None
+    fixture_type: int | None
+    name: str
+    on: bool
+    brightness: int
+    color_temp_kelvin: int | None
+    min_color_temp_kelvin: int | None
+    max_color_temp_kelvin: int | None
+
+
+@dataclass
 class State:
     """Object holding the state of Modern Forms Device."""
 
@@ -169,6 +201,8 @@ class State:
     user_data: str = ""
     fan_timer: int | None = None
     light_timer: int | None = None
+    light_color_temp_kelvin: int | None = None
+    light_fixtures: list[Light] = field(default_factory=list)
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> State:
@@ -193,7 +227,81 @@ class State:
             user_data=data.get(STATE_USER_DATA, ""),
             fan_timer=data.get(STATE_FAN_TIMER),
             light_timer=data.get(STATE_LIGHT_TIMER),
+            light_color_temp_kelvin=data.get(STATE_LIGHT_COLOR_TEMP),
+            # A missing key (legacy Gen 1/2/3 shadows never send one) means
+            # "build a single synthetic fixture from the flat light state
+            # fields." An explicit empty list (Gen4's read-all with zero
+            # light fixtures installed) must stay empty, so this checks for
+            # None rather than falsiness — `or` would also catch `[]`.
+            light_fixtures=(
+                data[STATE_LIGHT_FIXTURES]
+                if data.get(STATE_LIGHT_FIXTURES) is not None
+                else [
+                    Light(
+                        address=None,
+                        fixture_type=None,
+                        name="",
+                        on=data.get(STATE_LIGHT_POWER, False),
+                        brightness=data.get(STATE_LIGHT_BRIGHTNESS, 100),
+                        color_temp_kelvin=data.get(STATE_LIGHT_COLOR_TEMP),
+                        min_color_temp_kelvin=None,
+                        max_color_temp_kelvin=None,
+                    )
+                ]
+            ),
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return this State as a canonical dict — the inverse of from_dict().
+
+        Used by generation-specific control paths (currently only Gen4) that
+        receive a partial state change from the device and need to merge it
+        onto the full cached state before rebuilding a State.
+        """
+        return {
+            STATE_FAN_POWER: self.fan_on,
+            STATE_FAN_SPEED: self.fan_speed,
+            STATE_FAN_DIRECTION: self.fan_direction,
+            STATE_FAN_SLEEP_TIMER: self.fan_sleep_timer,
+            STATE_LIGHT_POWER: self.light_on,
+            STATE_LIGHT_BRIGHTNESS: self.light_brightness,
+            STATE_LIGHT_COLOR_TEMP: self.light_color_temp_kelvin,
+            STATE_LIGHT_SLEEP_TIMER: self.light_sleep_timer,
+            STATE_AWAY_MODE: self.away_mode_enabled,
+            STATE_ADAPTIVE_LEARNING: self.adaptive_learning_enabled,
+            STATE_WIND_POWER: self.wind,
+            STATE_WIND_SPEED: self.wind_speed,
+            STATE_RF_PAIR_MODE_ACTIVE: self.rf_pair_mode_active,
+            STATE_RESET_RF_PAIR_LIST: self.reset_rf_pair_list,
+            STATE_FACTORY_RESET: self.factory_reset,
+            STATE_DECOMMISSION: self.decommission,
+            STATE_SCHEDULE: self.schedule,
+            STATE_USER_DATA: self.user_data,
+            STATE_FAN_TIMER: self.fan_timer,
+            STATE_LIGHT_TIMER: self.light_timer,
+            STATE_LIGHT_FIXTURES: self.light_fixtures,
+        }
+
+
+def _infer_generation(state_data: dict[str, Any]) -> Generation:
+    """Infer gen1_2 vs gen3 from whether relative timer keys have a value.
+
+    Only called when no explicit generation is passed to update_from_dict()
+    — Gen4 always passes one explicitly, since Gen4 detection happens via
+    the /device endpoint before any state dict exists to infer from.
+
+    Checks the value rather than just key presence: a dict built from
+    State.to_dict() (as the Gen4 apply-change helpers build, though they
+    always pass an explicit generation and never reach this function)
+    always includes these keys, `None` when unset. A presence-only check
+    would misclassify such a dict as gen3.
+    """
+    if (
+        state_data.get(STATE_FAN_TIMER) is not None
+        or state_data.get(STATE_LIGHT_TIMER) is not None
+    ):
+        return Generation.GEN3
+    return Generation.GEN1_2
 
 
 class Device:
@@ -201,17 +309,29 @@ class Device:
 
     info: Info
     state: State
+    generation: Generation
 
-    def __init__(self, state_data: dict, info_data: dict):
+    def __init__(
+        self,
+        state_data: dict,
+        info_data: dict,
+        generation: Generation | None = None,
+    ):
         """Initialize an empty Modern Forms device class."""
-        self.update_from_dict(state_data=state_data, info_data=info_data)
+        self.update_from_dict(
+            state_data=state_data, info_data=info_data, generation=generation
+        )
 
     def update_from_dict(
-        self, state_data: dict | None = None, info_data: dict | None = None
+        self,
+        state_data: dict | None = None,
+        info_data: dict | None = None,
+        generation: Generation | None = None,
     ) -> Device:
         """Update the device status with the passed dict."""
         if state_data is not None:
             self.state = State.from_dict(state_data)
+            self.generation = generation or _infer_generation(state_data)
         if info_data is not None:
             self.info = Info.from_dict(info_data)
         return self
@@ -222,4 +342,16 @@ class Device:
 
     def has_relative_timers(self) -> bool:
         """See if the Fan uses relative (seconds-until-off) sleep timers."""
-        return self.state.fan_timer is not None or self.state.light_timer is not None
+        return self.generation == Generation.GEN3
+
+    def has_adaptive_learning(self) -> bool:
+        """See if the Fan supports adaptive learning (not available on Gen4)."""
+        return self.generation != Generation.GEN4
+
+    def has_sleep_timer(self) -> bool:
+        """See if the Fan supports sleep timers at all (not available on Gen4)."""
+        return self.generation != Generation.GEN4
+
+    def has_identify(self) -> bool:
+        """See if the Fan supports the identify/findme function (Gen4 only)."""
+        return self.generation == Generation.GEN4
