@@ -1727,6 +1727,23 @@ async def test_light_fixture_none_address_routes_through_legacy(aresponses):
         assert device.status.light_on is True
 
 
+@pytest.mark.asyncio
+async def test_light_fixture_none_address_raises_on_gen4(aresponses):
+    """Test that light_fixture(None, ...) is rejected on a Gen4 device.
+
+    Regression test: None only ever means "the gen1_2/gen3 synthetic
+    entry" — a Gen4 device has no such thing, and previously this would
+    have silently sent {"addr": null} to /fixture rather than raising a
+    clear library exception.
+    """
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.light_fixture(None, on=True)
+
+
 def test_has_identify_true_only_for_gen4():
     """Test has_identify() reflects generation."""
     legacy_device = Device(state_data=basic_response, info_data=basic_info)

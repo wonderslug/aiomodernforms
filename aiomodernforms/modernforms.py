@@ -594,6 +594,17 @@ class ModernFormsDevice:
             await self.update()
         assert self._device is not None
 
+        if address is None and self._device.generation == Generation.GEN4:
+            # None only ever means "the gen1_2/gen3 synthetic entry" — a
+            # Gen4 device has no such thing, and sending {"addr": null} to
+            # /fixture would silently no-op rather than erroring cleanly
+            # (mock_fan's read-all branch, and likely real hardware too,
+            # doesn't recognize it as a control request at all).
+            raise ModernFormsInvalidSettingsError(
+                "address must be a real fixture address on Gen4 — None"
+                " only targets the gen1_2/gen3 synthetic light"
+            )
+
         if brightness is not None and (
             not isinstance(brightness, int)
             or int(brightness) < LIGHT_BRIGHTNESS_LOW_VALUE
