@@ -643,6 +643,46 @@ async def _gather_gen4_report(
                 f"{fixture.get(const.GEN4_FIELD_ADDR)}:** `{fixture_extra}`"
             )
 
+    # Some real Gen4 fans omit `state` from the read-all response entirely
+    # (confirmed against real hardware, see GitHub issue #287), even though
+    # the PDF documents read-all as including it. Fall back to an
+    # individual read (action 3 + addr) per fixture missing it, and show
+    # the raw response so this is visible in the report.
+    filled_fixtures = []
+    for fixture in fixtures:
+        if const.GEN4_FIELD_STATE in fixture:
+            filled_fixtures.append(fixture)
+            continue
+        addr = fixture.get(const.GEN4_FIELD_ADDR)
+        if addr is None:
+            filled_fixtures.append(fixture)
+            continue
+        try:
+            single = await fan._request(  # pylint: disable=protected-access
+                {
+                    const.GEN4_FIELD_ACTION: const.GEN4_FIXTURE_ACTION_READ,
+                    const.GEN4_FIELD_ADDR: addr,
+                },
+                path=const.GEN4_FIXTURE_API_ENDPOINT,
+            )
+        except aiomodernforms.ModernFormsError as err:
+            out.append(f"\nIndividual read for fixture {addr} failed: `{err}`")
+            filled_fixtures.append(fixture)
+            continue
+        out.append(_section(f"Raw individual /fixture read (addr {addr})"))
+        out.append(
+            "*(this device's read-all response omitted `state` for this "
+            "fixture, so an individual read was needed)*"
+        )
+        out.append(_json_block(redact(single)))
+        merged = dict(fixture)
+        if const.GEN4_FIELD_STATE in single:
+            merged[const.GEN4_FIELD_STATE] = single[const.GEN4_FIELD_STATE]
+        if const.GEN4_FIELD_DETAIL in single:
+            merged[const.GEN4_FIELD_DETAIL] = single[const.GEN4_FIELD_DETAIL]
+        filled_fixtures.append(merged)
+    fixtures = filled_fixtures
+
     fan_fixture, light_fixtures = gen4.classify_fixtures(fixtures)
     fan._gen4_fan_addr = (fan_fixture or {}).get(  # pylint: disable=protected-access
         const.GEN4_FIELD_ADDR
@@ -696,6 +736,16 @@ async def gather_report(
 
 def main() -> None:
     """Parse arguments and print the diagnostic report."""
+    # The report uses emoji (✅/❌/⏭️) as status markers; Windows terminals
+    # default stdout/stderr to the system codepage (e.g. cp1252) rather
+    # than UTF-8, which raises UnicodeEncodeError on print(). Reconfigure
+    # is Python 3.7+ and only available on real text streams, not when
+    # stdout is replaced (e.g. under pytest's capture) — hence the guard.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(
         description=(
             "Connect to a Modern Forms / WAC fan and print a redacted "
