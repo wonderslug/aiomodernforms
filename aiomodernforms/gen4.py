@@ -96,7 +96,13 @@ def _light_from_fixture(fixture: dict[str, Any]) -> Light:
     """Build a canonical Light from one raw /fixture read-all element."""
     state = fixture.get(GEN4_FIELD_STATE) or {}
     detail = fixture.get(GEN4_FIELD_DETAIL) or {}
-    raw_level = state.get("level", LIGHT_BRIGHTNESS_HIGH_VALUE * GEN4_BRIGHTNESS_SCALE)
+    default_level = LIGHT_BRIGHTNESS_HIGH_VALUE * GEN4_BRIGHTNESS_SCALE
+    raw_level = state.get(GEN4_FIELD_LEVEL, default_level)
+    if not isinstance(raw_level, (int, float)) or isinstance(raw_level, bool):
+        # A misbehaving device sending a non-numeric level (string, null)
+        # shouldn't crash translation for the whole device — fall back to
+        # the same default as a missing key.
+        raw_level = default_level
     brightness = max(1, min(100, round(raw_level / GEN4_BRIGHTNESS_SCALE)))
     return Light(
         address=fixture.get(GEN4_FIELD_ADDR),

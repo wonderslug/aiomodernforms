@@ -2317,6 +2317,24 @@ def test_build_state_data_maps_fan_and_light_fields():
     assert light.max_color_temp_kelvin == 5000
 
 
+def test_build_state_data_malformed_level_falls_back_to_default():
+    """Test that a non-numeric `level` doesn't crash translation.
+
+    Regression test (Copilot suggestion on #289): a misbehaving device
+    sending `level` as a string or null used to raise a raw TypeError from
+    `raw_level / GEN4_BRIGHTNESS_SCALE`, crashing update() for the whole
+    device rather than just falling back to a sensible default.
+    """
+    bad_light = {
+        **gen4_light_fixture,
+        "state": {**gen4_light_fixture["state"], "level": "not-a-number"},
+    }
+    state_data = gen4.build_state_data(
+        gen4_device_response, gen4_fan_fixture, [bad_light]
+    )
+    assert state_data[STATE_LIGHT_FIXTURES][0].brightness == 100
+
+
 def test_build_state_data_reverse_direction():
     """Test that a True fanDirection (gen4 boolean) maps to the reverse string."""
     reversed_fan = {
