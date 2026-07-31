@@ -17,6 +17,7 @@ from aiomodernforms.const import (
     GEN4_DEVICE_NWK_STATE,
     GEN4_DEVICE_OWNER,
     GEN4_DEVICE_SCM_VER,
+    GEN4_DEVICE_STA_MAC,
     GEN4_DEVICE_SYSTEM_TYPE,
     GEN4_FIELD_ADDR,
     GEN4_FIELD_DETAIL,
@@ -25,6 +26,7 @@ from aiomodernforms.const import (
     GEN4_FIELD_MAX_COLOR_TEMP,
     GEN4_FIELD_MIN_COLOR_TEMP,
     GEN4_FIELD_MIX_COLOR_TEMP,
+    GEN4_FIELD_MODEL,
     GEN4_FIELD_NAME,
     GEN4_FIELD_STATE,
     GEN4_FIELD_STATUS,
@@ -49,6 +51,8 @@ LIGHT_FIXTURE_TYPE = 1
 
 DEVICE_NAME = "Mock Gen4 Fan"
 _MOCK_CERTIFICATE_ID = "mockgen4certificateid00000000000000000000000000000000000000"
+_MOCK_STA_MAC = "AA:BB:CC:00:11:22"
+_MOCK_FAN_MODEL = "2603-56"
 
 
 def _is_bool(value: object) -> bool:
@@ -156,6 +160,7 @@ class Gen4FanState:
             fixture_type=GEN4_FIXTURE_TYPE_FAN,
             name="Fan",
             state=_initial_fan_state(),
+            detail={GEN4_FIELD_MODEL: _MOCK_FAN_MODEL},
             validators=_FAN_VALIDATORS,
         )
         self.lights: list[Fixture] = [
@@ -200,6 +205,7 @@ def device_data(away_mode_enabled: bool) -> dict[str, object]:
         GEN4_DEVICE_OWNER: "mock@example.com",
         GEN4_DEVICE_IOTM_VER: "01.00.0082",
         GEN4_DEVICE_SCM_VER: "01.00.0012",
+        GEN4_DEVICE_STA_MAC: _MOCK_STA_MAC,
         STATE_AWAY_MODE: away_mode_enabled,
         GEN4_DEVICE_NWK_STATE: {
             GEN4_NWK_CERTIFICATE_ID: _MOCK_CERTIFICATE_ID,

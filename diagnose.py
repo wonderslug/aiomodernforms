@@ -58,6 +58,9 @@ SENSITIVE_KEYS = {
     const.CONFIG_NAME,  # config-read device name, Gen 3
     const.GEN4_NWK_CERTIFICATE_ID,  # nested under /device "nwkState.certificateID"
     const.GEN4_FIELD_NAME,  # user-assigned fixture name, e.g. "Master Bedroom Light"
+    const.GEN4_DEVICE_STA_MAC,  # WiFi station MAC; also this lib's INFO_MAC for Gen4
+    const.GEN4_DEVICE_AP_MAC,
+    const.GEN4_DEVICE_BLE_MAC,
 }
 
 # Every key this library currently parses out of each endpoint's response.
@@ -128,6 +131,7 @@ GEN4_DEVICE_KNOWN_KEYS = {
     const.GEN4_DEVICE_SCM_VER,
     const.STATE_AWAY_MODE,
     const.GEN4_DEVICE_NWK_STATE,
+    const.GEN4_DEVICE_STA_MAC,
 }
 
 GEN4_FIXTURE_KNOWN_KEYS = {
@@ -688,7 +692,7 @@ async def _gather_gen4_report(
         const.GEN4_FIELD_ADDR
     )
     state_data = gen4.build_state_data(device_raw, fan_fixture, light_fixtures)
-    info_data = gen4.build_info_data(device_raw)
+    info_data = gen4.build_info_data(device_raw, fan_fixture, light_fixtures)
     fan._device = Device(  # pylint: disable=protected-access
         state_data=state_data, info_data=info_data, generation=Generation.GEN4
     )

@@ -5,12 +5,14 @@ from aiomodernforms.const import (
     COMMAND_FAN_SPEED,
     COMMAND_WIND,
     COMMAND_WIND_SPEED,
+    GEN4_DEVICE_STA_MAC,
     GEN4_FIELD_ADDR,
     GEN4_FIELD_FINDME,
     GEN4_FIELD_LEVEL,
     GEN4_FIELD_MAX_COLOR_TEMP,
     GEN4_FIELD_MIN_COLOR_TEMP,
     GEN4_FIELD_MIX_COLOR_TEMP,
+    GEN4_FIELD_MODEL,
     GEN4_FIELD_NAME,
     GEN4_FIELD_STATE,
     GEN4_FIELD_STATUS,
@@ -114,6 +116,18 @@ def test_gen4_fixture_as_wire_dict_shape():
     assert GEN4_FIELD_MAX_COLOR_TEMP in light_wire["detail"]
 
 
+def test_gen4_fan_fixture_reports_a_model():
+    """The fan fixture's detail carries a model string.
+
+    aiomodernforms maps this into Info.fan_type for a real "model" value
+    in a consumer's device registry — a client testing against this mock
+    should see the same non-empty model a real Gen4 fan reports.
+    """
+    state = Gen4FanState(lights=1)
+    wire = state.fan.as_wire_dict()
+    assert wire["detail"][GEN4_FIELD_MODEL]
+
+
 def test_gen4_fan_state_reset_restores_defaults():
     """reset() restores the fan, all lights, and away mode to startup defaults."""
     state = Gen4FanState(lights=2)
@@ -134,6 +148,7 @@ def test_device_data_reflects_away_mode():
     data = device_data(away_mode_enabled=True)
     assert data["systemType"] == "fan_g4"
     assert data[STATE_AWAY_MODE] is True
+    assert data[GEN4_DEVICE_STA_MAC]
     assert "nwkState" in data
     assert GEN4_NWK_CERTIFICATE_ID in data["nwkState"]
     assert GEN4_NWK_RSSI in data["nwkState"]

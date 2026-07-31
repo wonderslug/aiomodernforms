@@ -222,7 +222,7 @@ class ModernFormsDevice:
         self._gen4_fan_addr = (fan_fixture or {}).get(GEN4_FIELD_ADDR)
 
         state_data = gen4.build_state_data(device_data, fan_fixture, light_fixtures)
-        info_data = gen4.build_info_data(device_data)
+        info_data = gen4.build_info_data(device_data, fan_fixture, light_fixtures)
 
         if self._device is None or full_update:
             self._device = Device(

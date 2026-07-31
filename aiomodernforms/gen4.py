@@ -29,6 +29,7 @@ from .const import (
     GEN4_DEVICE_NAME,
     GEN4_DEVICE_OWNER,
     GEN4_DEVICE_SCM_VER,
+    GEN4_DEVICE_STA_MAC,
     GEN4_FIELD_ADDR,
     GEN4_FIELD_DETAIL,
     GEN4_FIELD_FINDME,
@@ -36,6 +37,7 @@ from .const import (
     GEN4_FIELD_MAX_COLOR_TEMP,
     GEN4_FIELD_MIN_COLOR_TEMP,
     GEN4_FIELD_MIX_COLOR_TEMP,
+    GEN4_FIELD_MODEL,
     GEN4_FIELD_NAME,
     GEN4_FIELD_STATE,
     GEN4_FIELD_STATUS,
@@ -44,7 +46,10 @@ from .const import (
     GEN4_LIGHT_FIXTURE_TYPES,
     GEN4_SYSTEM_TYPE_MARKERS,
     INFO_DEVICE_NAME,
+    INFO_FAN_TYPE,
     INFO_FIRMWARE_VERSION,
+    INFO_LIGHT_TYPE,
+    INFO_MAC,
     INFO_MAIN_MCU_FIRMWARE_VERSION,
     INFO_OWNER,
     LIGHT_BRIGHTNESS_HIGH_VALUE,
@@ -151,13 +156,30 @@ def build_state_data(
     }
 
 
-def build_info_data(device_data: dict[str, Any]) -> dict[str, Any]:
-    """Build a canonical info dict from a Gen4 /device response."""
+def build_info_data(
+    device_data: dict[str, Any],
+    fan_fixture: dict[str, Any] | None = None,
+    light_fixtures: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build a canonical info dict from a Gen4 /device response.
+
+    `fan_fixture`/`light_fixtures` (the same `classify_fixtures()` output
+    `build_state_data()` takes) fill in the fields a consumer needs for
+    stable device/entity identity — a Home Assistant integration keys its
+    config entry's unique_id and device registry identifiers off `INFO_MAC`,
+    and gates whether it creates a light entity at all off `INFO_LIGHT_TYPE`
+    being non-empty, matching the legacy /mf behavior those checks were
+    written against.
+    """
+    fan_detail = (fan_fixture or {}).get(GEN4_FIELD_DETAIL) or {}
     return {
         INFO_DEVICE_NAME: device_data.get(GEN4_DEVICE_NAME, ""),
         INFO_FIRMWARE_VERSION: device_data.get(GEN4_DEVICE_IOTM_VER, ""),
         INFO_MAIN_MCU_FIRMWARE_VERSION: device_data.get(GEN4_DEVICE_SCM_VER, ""),
         INFO_OWNER: device_data.get(GEN4_DEVICE_OWNER, ""),
+        INFO_MAC: device_data.get(GEN4_DEVICE_STA_MAC, ""),
+        INFO_LIGHT_TYPE: "gen4" if light_fixtures else "",
+        INFO_FAN_TYPE: fan_detail.get(GEN4_FIELD_MODEL, ""),
     }
 
 

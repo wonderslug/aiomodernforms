@@ -18,7 +18,10 @@ from aiomodernforms.const import (
     FAN_SPEED_HIGH_VALUE,
     FAN_SPEED_LOW_VALUE,
     INFO_DEVICE_NAME,
+    INFO_FAN_TYPE,
     INFO_FIRMWARE_VERSION,
+    INFO_LIGHT_TYPE,
+    INFO_MAC,
     INFO_MAIN_MCU_FIRMWARE_VERSION,
     INFO_OWNER,
     LIGHT_BRIGHTNESS_HIGH_VALUE,
@@ -214,6 +217,7 @@ gen4_device_response = {
     "iotmVer": "01.00.0082",
     "scmVer": "01.00.0012",
     "awayModeEnabled": False,
+    "staMac": "AA:BB:CC:DD:EE:FF",
     "nwkState": {
         "certificateID": "abc123certid",
         "rssi": "-42",
@@ -230,6 +234,9 @@ gen4_fan_fixture = {
         "fanDirection": False,
         "wind": False,
         "windSpeed": 2,
+    },
+    "detail": {
+        "model": "2603-56",
     },
 }
 
@@ -298,6 +305,9 @@ async def test_update_detects_gen4(aresponses):
         assert device.status.light_brightness == 50
         assert len(device.status.light_fixtures) == 1
         assert device.info.device_name == "Fan"
+        assert device.info.mac_address == "AA:BB:CC:DD:EE:FF"
+        assert device.info.light_type == "gen4"
+        assert device.info.fan_type == "2603-56"
         assert device._gen4_fan_addr == 218103808
 
 
@@ -1563,6 +1573,7 @@ async def test_light_gen4_no_fixtures_raises_not_supported(aresponses):
     async with aiomodernforms.ModernFormsDevice("fan.local") as device:
         await device.update()
         assert device.status.light_fixtures == []
+        assert device.info.light_type == ""
         with pytest.raises(ModernFormsNotSupportedError):
             await device.light(on=True)
 
@@ -2294,12 +2305,42 @@ def test_build_state_data_no_lights_uses_synthetic_default():
 
 
 def test_build_info_data_maps_device_fields():
-    """Test that build_info_data maps /device fields into canonical INFO_* keys."""
+    """Test that build_info_data maps /device fields into canonical INFO_* keys.
+
+    Without fan_fixture/light_fixtures (the pre-existing call shape), the
+    fields that depend on them fall back to empty — mac_address, light_type,
+    and fan_type all default to "".
+    """
     info_data = gen4.build_info_data(gen4_device_response)
     assert info_data[INFO_DEVICE_NAME] == "Fan"
     assert info_data[INFO_FIRMWARE_VERSION] == "01.00.0082"
     assert info_data[INFO_MAIN_MCU_FIRMWARE_VERSION] == "01.00.0012"
     assert info_data[INFO_OWNER] == "someone@somewhere.com"
+    assert info_data[INFO_MAC] == "AA:BB:CC:DD:EE:FF"
+    assert info_data[INFO_LIGHT_TYPE] == ""
+    assert info_data[INFO_FAN_TYPE] == ""
+
+
+def test_build_info_data_maps_mac_light_type_and_fan_type():
+    """Test that build_info_data maps staMac, light presence, and fan model.
+
+    These three fields are what a Home Assistant-style consumer needs for
+    stable entity/device identity: INFO_MAC for the config entry's
+    unique_id and device registry identifiers, INFO_LIGHT_TYPE (non-empty)
+    for whether to set up a light entity at all, and INFO_FAN_TYPE for a
+    real "model" string in the device registry.
+    """
+    info_data = gen4.build_info_data(
+        gen4_device_response, gen4_fan_fixture, [gen4_light_fixture]
+    )
+    assert info_data[INFO_MAC] == "AA:BB:CC:DD:EE:FF"
+    assert info_data[INFO_LIGHT_TYPE] == "gen4"
+    assert info_data[INFO_FAN_TYPE] == "2603-56"
+
+    info_data_no_lights = gen4.build_info_data(
+        gen4_device_response, gen4_fan_fixture, []
+    )
+    assert info_data_no_lights[INFO_LIGHT_TYPE] == ""
 
 
 def test_build_fan_control_state_translates_all_fields():
