@@ -38,6 +38,8 @@ from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime
 from typing import Any
 
+import aiohttp
+
 import aiomodernforms
 from aiomodernforms import const, gen4
 from aiomodernforms.__version__ import __version__
@@ -722,7 +724,14 @@ async def gather_report(
             device_raw = await fan._request(  # pylint: disable=protected-access
                 {const.GEN4_DEVICE_QUERY: True}, path=const.GEN4_DEVICE_API_ENDPOINT
             )
-        except aiomodernforms.ModernFormsError:
+        except (aiomodernforms.ModernFormsError, aiohttp.ClientError):
+            # Best-effort probe, matching _probe_gen4()'s identical handling
+            # in modernforms.py: a non-JSON 200 response (HTML error page,
+            # captive portal, any non-fan device at this host) raises
+            # aiohttp's own exception from response.json() rather than a
+            # library one, since that call sits outside _request()'s normal
+            # aiohttp.ClientError-to-ModernFormsError translation. Either
+            # failure just means "fall back to the legacy report" here.
             device_raw = None
 
         if device_raw is not None and gen4.is_gen4_system_type(
