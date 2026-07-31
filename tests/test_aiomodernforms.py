@@ -1744,6 +1744,40 @@ async def test_light_fixture_none_address_raises_on_gen4(aresponses):
             await device.light_fixture(None, on=True)
 
 
+@pytest.mark.asyncio
+async def test_light_fixture_rejects_non_int_address(aresponses):
+    """Test that light_fixture() rejects a non-int, non-None address.
+
+    Regression test (Copilot suggestion on #289): a bad address type used
+    to be forwarded to /fixture as-is instead of raising a clear error,
+    unlike every other parameter here.
+    """
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.light_fixture("not-an-address", on=True)
+
+
+@pytest.mark.asyncio
+async def test_light_fixture_rejects_invalid_color_temp_and_identify_types(aresponses):
+    """Test that light_fixture() validates color_temp_kelvin and identify types.
+
+    Regression test (Copilot suggestion on #289): both were forwarded to
+    /fixture without type validation, unlike brightness/on.
+    """
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        address = device.status.light_fixtures[0].address
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.light_fixture(address, color_temp_kelvin="warm")
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.light_fixture(address, identify="yes")
+
+
 def test_has_identify_true_only_for_gen4():
     """Test has_identify() reflects generation."""
     legacy_device = Device(state_data=basic_response, info_data=basic_info)

@@ -605,6 +605,11 @@ class ModernFormsDevice:
                 " only targets the gen1_2/gen3 synthetic light"
             )
 
+        if address is not None and (
+            not isinstance(address, int) or isinstance(address, bool)
+        ):
+            raise ModernFormsInvalidSettingsError("address must be an int or None")
+
         if brightness is not None and (
             not isinstance(brightness, int)
             or int(brightness) < LIGHT_BRIGHTNESS_LOW_VALUE
@@ -617,6 +622,15 @@ class ModernFormsDevice:
 
         if on is not None and not isinstance(on, bool):
             raise ModernFormsInvalidSettingsError("on must be a boolean")
+
+        if color_temp_kelvin is not None and (
+            not isinstance(color_temp_kelvin, int)
+            or isinstance(color_temp_kelvin, bool)
+        ):
+            raise ModernFormsInvalidSettingsError("color_temp_kelvin must be an int")
+
+        if identify is not None and not isinstance(identify, bool):
+            raise ModernFormsInvalidSettingsError("identify must be a boolean")
 
         sleep_commands: dict[str, int] = {}
         if sleep is not None and self._device.generation != Generation.GEN4:
