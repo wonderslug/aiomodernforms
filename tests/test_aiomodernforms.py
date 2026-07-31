@@ -1524,6 +1524,39 @@ async def test_fan_gen4_identify(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_fan_rejects_non_bool_identify(aresponses):
+    """Test that fan(identify=...) validates its type.
+
+    Regression test (Copilot suggestion on #289): identify was forwarded
+    to the Gen4 command dict without type validation, unlike on/wind.
+    """
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.fan(identify="yes")
+
+
+@pytest.mark.asyncio
+async def test_fan_gen4_raises_when_no_fan_fixture_found(aresponses):
+    """Test that fan() raises cleanly when /fixture read-all has no fan fixture.
+
+    Regression test (Copilot suggestion on #289): _gen4_fan_addr stays None
+    when classify_fixtures() finds no GEN4_FIXTURE_TYPE_FAN-typed fixture.
+    Previously fan() would send {"addr": null} to /fixture in that case —
+    the same silent-no-op/confusing-device class of bug light_fixture()'s
+    address=None guard already fixed — instead of raising a clear error.
+    """
+    _mock_gen4_device(aresponses, fixtures=[gen4_light_fixture])
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.fan(speed=3)
+
+
+@pytest.mark.asyncio
 async def test_fan_gen4_sleep_is_a_silent_noop(aresponses):
     """Test that fan(sleep=...) on Gen4 sends no timer field at all."""
     _mock_gen4_device(aresponses)

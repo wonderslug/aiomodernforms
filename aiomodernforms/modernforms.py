@@ -703,6 +703,9 @@ class ModernFormsDevice:
 
             commands[COMMAND_FAN_POWER] = on
 
+        if identify is not None and not isinstance(identify, bool):
+            raise ModernFormsInvalidSettingsError("identify must be a boolean")
+
         if (
             sleep is not None
             and self._device is not None
@@ -751,6 +754,16 @@ class ModernFormsDevice:
         if self._device is not None and self._device.generation == Generation.GEN4:
             wire_state = gen4.build_fan_control_state(commands)
             if wire_state:
+                if self._gen4_fan_addr is None:
+                    # No fixture typed GEN4_FIXTURE_TYPE_FAN was found in
+                    # the last /fixture read-all — sending {"addr": null}
+                    # would silently no-op or confuse the device rather
+                    # than erroring cleanly (same class of issue as
+                    # light_fixture()'s address=None guard above).
+                    raise ModernFormsNotSupportedError(
+                        "fan() is not supported — no fan fixture was found"
+                        " on this Gen4 device"
+                    )
                 response = await self._request(
                     {
                         "action": GEN4_FIXTURE_ACTION_CONTROL,
