@@ -85,3 +85,7 @@ make mock-fan GENERATION=gen1_2 PORT=8081
 enables breeze/wind mode support; `--no-light` simulates a fan-only unit
 with no light kit (light is on by default). Point your client at the
 printed host/port exactly as you would a real fan.
+
+For Gen4, use `--generation gen4 --lights N` (`--breeze`/`--no-light` don't apply —
+Gen4 always exposes breeze fields on the fan fixture, and light count is controlled
+by `--lights`, default 1; `--lights 0` simulates a fan with no light kit).

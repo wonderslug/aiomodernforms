@@ -53,3 +53,27 @@ def test_explicit_light_flag():
     """--light explicitly sets args.light to True."""
     args = _parse_args(["--generation", "gen1_2", "--light"])
     assert args.light is True
+
+
+def test_gen4_generation_accepted():
+    """--generation gen4 is a valid choice, distinct from the PROFILES dict."""
+    args = _parse_args(["--generation", "gen4"])
+    assert args.generation == "gen4"
+
+
+def test_lights_defaults_to_one():
+    """--lights defaults to 1 when omitted."""
+    args = _parse_args(["--generation", "gen4"])
+    assert args.lights == 1
+
+
+def test_lights_explicit_value():
+    """--lights accepts an explicit integer count."""
+    args = _parse_args(["--generation", "gen4", "--lights", "3"])
+    assert args.lights == 3
+
+
+def test_lights_zero():
+    """--lights 0 is accepted (a Gen4 fan with no lights)."""
+    args = _parse_args(["--generation", "gen4", "--lights", "0"])
+    assert args.lights == 0

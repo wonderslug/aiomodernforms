@@ -13,12 +13,14 @@ included in the report output, so the result should be safe to paste
 into a public GitHub issue as-is. Still, skim it once before posting.
 
 Pass --active to additionally exercise the fan's reversible control
-commands (light, fan speed/direction/power, breeze mode, away mode) and
-confirm they work end-to-end, not just that the device is reachable.
-Original state is restored afterward regardless of test outcome.
-Destructive or disruptive commands are never sent: reboot, factory_reset,
-decommission, clear_paired_devices, enable_pairing_mode, set_schedule, and
-adaptive_learning are always skipped.
+commands (light — including any Gen4 light fixtures beyond the first —
+fan speed/direction/power, breeze mode, away mode) and confirm they work
+end-to-end, not just that the device is reachable. Original state is
+restored afterward regardless of test outcome. Destructive or disruptive
+commands are never sent: reboot, factory_reset, decommission,
+clear_paired_devices, enable_pairing_mode, set_schedule, and
+adaptive_learning are always skipped. Sleep timers are also skipped on
+Gen4 fans, which don't support them.
 
 Usage:
     python diagnose.py 192.168.1.85
@@ -36,23 +38,40 @@ from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime
 from typing import Any
 
+import aiohttp
+
 import aiomodernforms
-from aiomodernforms import const
+from aiomodernforms import const, gen4
 from aiomodernforms.__version__ import __version__
-from aiomodernforms.models import ConfigInfo, Device
+from aiomodernforms.models import ConfigInfo, Device, Generation
 
 REDACTED = "<redacted>"
 
 # Fields that identify a specific device, account, or person. These are
 # never printed, regardless of which raw response they show up in.
 SENSITIVE_KEYS = {
-    const.INFO_OWNER,  # account email address
+    const.INFO_OWNER,  # account email address; also Gen4 /device "owner"
     const.INFO_FEDERATED_IDENTITY,  # AWS Cognito identity
     const.INFO_MAC,
-    const.INFO_DEVICE_NAME,  # user-assigned name, e.g. "Living Room"
+    # user-assigned name, e.g. "Living Room"; also Gen4 /device "deviceName"
+    const.INFO_DEVICE_NAME,
     const.CONFIG_CERTIFICATE_ID,
     const.CONFIG_NAME_LEGACY,  # config-read device name, Gen 1/2
     const.CONFIG_NAME,  # config-read device name, Gen 3
+    const.GEN4_NWK_CERTIFICATE_ID,  # nested under /device "nwkState.certificateID"
+    const.GEN4_FIELD_NAME,  # user-assigned fixture name, e.g. "Master Bedroom Light"
+    const.GEN4_DEVICE_STA_MAC,  # WiFi station MAC; also this lib's INFO_MAC for Gen4
+    const.GEN4_DEVICE_AP_MAC,
+    const.GEN4_DEVICE_BLE_MAC,
+    # nwkState.bssid/ssid identify a specific WiFi router/network, both
+    # geolocatable via public WiFi-mapping databases (e.g. WiGLE).
+    const.GEN4_NWK_BSSID,
+    const.GEN4_NWK_SSID,
+    # /device also reports the fan's own GPS-derived location directly.
+    const.GEN4_DEVICE_LATITUDE,
+    const.GEN4_DEVICE_LONGITUDE,
+    const.GEN4_DEVICE_LOCATION_ID,
+    const.GEN4_DEVICE_TIMEZONE,
 }
 
 # Every key this library currently parses out of each endpoint's response.
@@ -115,6 +134,25 @@ CONFIG_KNOWN_KEYS = {
     const.CONFIG_WIFI_STRENGTH_ALT2,
 }
 
+GEN4_DEVICE_KNOWN_KEYS = {
+    const.GEN4_DEVICE_SYSTEM_TYPE,
+    const.GEN4_DEVICE_NAME,
+    const.GEN4_DEVICE_OWNER,
+    const.GEN4_DEVICE_IOTM_VER,
+    const.GEN4_DEVICE_SCM_VER,
+    const.STATE_AWAY_MODE,
+    const.GEN4_DEVICE_NWK_STATE,
+    const.GEN4_DEVICE_STA_MAC,
+}
+
+GEN4_FIXTURE_KNOWN_KEYS = {
+    const.GEN4_FIELD_ADDR,
+    const.GEN4_FIELD_NAME,
+    const.GEN4_FIELD_TYPE,
+    const.GEN4_FIELD_STATE,
+    const.GEN4_FIELD_DETAIL,
+}
+
 
 def _redact_client_id(value: Any) -> Any:
     """Keep the brand prefix (diagnostically useful); redact the MAC suffix."""
@@ -124,16 +162,33 @@ def _redact_client_id(value: Any) -> Any:
     return REDACTED
 
 
+def _redact_value(value: Any) -> Any:
+    """Recurse into dicts/lists so nested sensitive keys are also caught."""
+    if isinstance(value, dict):
+        return redact(value)
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    return value
+
+
 def redact(raw: dict[str, Any]) -> dict[str, Any]:
-    """Return a copy of a raw API response with sensitive fields redacted."""
+    """Return a copy of a raw API response with sensitive fields redacted.
+
+    Recurses into nested dicts and lists so keys buried at any depth (e.g.
+    Gen4's certificate ID at `/device`'s `nwkState.certificateID`, or a
+    fixture's `name` inside the `/fixture` read-all response's fixture
+    list) are redacted too, not just top-level keys.
+    """
     cleaned = dict(raw)
-    for key in cleaned:
+    for key, value in cleaned.items():
         if key == const.INFO_CLIENT_ID:
-            cleaned[key] = _redact_client_id(cleaned[key])
+            cleaned[key] = _redact_client_id(value)
         elif key in SENSITIVE_KEYS:
             cleaned[key] = REDACTED
-        elif key == const.STATE_SCHEDULE and cleaned[key]:
-            cleaned[key] = f"<{len(cleaned[key])} chars, redacted>"
+        elif key == const.STATE_SCHEDULE and value:
+            cleaned[key] = f"<{len(value)} chars, redacted>"
+        else:
+            cleaned[key] = _redact_value(value)
     return cleaned
 
 
@@ -155,7 +210,10 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
 
     Never sends destructive or disruptive commands: reboot, factory_reset,
     decommission, clear_paired_devices, enable_pairing_mode, set_schedule,
-    and adaptive_learning are always skipped. `fan._device` must already be
+    and adaptive_learning are always skipped. Sleep timers are skipped on
+    Gen4 fans (`has_sleep_timer()` is False there). Any light fixture
+    beyond the first (Gen4 only) is exercised via `light_fixture()` in
+    addition to the primary light. `fan._device` must already be
     populated (the caller is expected to have fetched status first).
     """
     out = [_section("Active control tests")]
@@ -168,6 +226,7 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
     results: list[tuple[str, bool, str]] = []
     supports_wind = original.wind is not None
     relative_timers = fan.has_relative_timers()
+    supports_sleep_timer = fan.has_sleep_timer()
 
     async def check(
         name: str, action: Awaitable[Any], verify: Callable[[], tuple[bool, str]]
@@ -178,6 +237,44 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
             results.append((name, ok, detail))
         except Exception as exc:  # pylint: disable=broad-except
             results.append((name, False, f"raised {type(exc).__name__}: {exc}"))
+
+    def light_fixtures_detail() -> str:
+        """Summarize every light fixture's current on/brightness state."""
+        return "light_fixtures=" + str(
+            [(fx.address, fx.on, fx.brightness) for fx in fan.status.light_fixtures]
+        )
+
+    def light_fixture_on_matches(
+        addr: int | None, want: bool
+    ) -> Callable[[], tuple[bool, str]]:
+        """Build a `check()` verifier confirming one fixture's `on` state."""
+
+        def verify() -> tuple[bool, str]:
+            return (
+                any(
+                    fx.address == addr and fx.on == want
+                    for fx in fan.status.light_fixtures
+                ),
+                light_fixtures_detail(),
+            )
+
+        return verify
+
+    def light_fixture_brightness_matches(
+        addr: int | None, want: int
+    ) -> Callable[[], tuple[bool, str]]:
+        """Build a `check()` verifier confirming one fixture's brightness."""
+
+        def verify() -> tuple[bool, str]:
+            return (
+                any(
+                    fx.address == addr and fx.brightness == want
+                    for fx in fan.status.light_fixtures
+                ),
+                light_fixtures_detail(),
+            )
+
+        return verify
 
     try:
         target_light_on = not original.light_on
@@ -200,34 +297,60 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
             ),
         )
 
-        await check(
-            "light(sleep=90) [set timer]",
-            fan.light(sleep=90),
-            lambda: (
-                (
-                    fan.status.light_timer
-                    if relative_timers
-                    else fan.status.light_sleep_timer
-                )
-                != 0,
-                f"light_timer={fan.status.light_timer} "
-                f"light_sleep_timer={fan.status.light_sleep_timer}",
-            ),
-        )
-        await check(
-            "light(sleep=0) [cancel timer]",
-            fan.light(sleep=0),
-            lambda: (
-                (
-                    fan.status.light_timer
-                    if relative_timers
-                    else fan.status.light_sleep_timer
-                )
-                == 0,
-                f"light_timer={fan.status.light_timer} "
-                f"light_sleep_timer={fan.status.light_sleep_timer}",
-            ),
-        )
+        if supports_sleep_timer:
+            await check(
+                "light(sleep=90) [set timer]",
+                fan.light(sleep=90),
+                lambda: (
+                    (
+                        fan.status.light_timer
+                        if relative_timers
+                        else fan.status.light_sleep_timer
+                    )
+                    != 0,
+                    f"light_timer={fan.status.light_timer} "
+                    f"light_sleep_timer={fan.status.light_sleep_timer}",
+                ),
+            )
+            await check(
+                "light(sleep=0) [cancel timer]",
+                fan.light(sleep=0),
+                lambda: (
+                    (
+                        fan.status.light_timer
+                        if relative_timers
+                        else fan.status.light_sleep_timer
+                    )
+                    == 0,
+                    f"light_timer={fan.status.light_timer} "
+                    f"light_sleep_timer={fan.status.light_sleep_timer}",
+                ),
+            )
+        else:
+            out.append("- ⏭️ Sleep timer: not supported on this device (skipped)")
+
+        # gen1_2/gen3 always report exactly one synthetic light fixture
+        # (address=None), already exercised above via light(). Any fixture
+        # beyond the first only exists on Gen4 multi-light fixtures, and is
+        # only addressable through light_fixture().
+        for extra_light in original.light_fixtures[1:]:
+            target_light_fixture_on = not extra_light.on
+            await check(
+                f"light_fixture({extra_light.address}, on=...)",
+                fan.light_fixture(extra_light.address, on=target_light_fixture_on),
+                light_fixture_on_matches(extra_light.address, target_light_fixture_on),
+            )
+
+            target_light_fixture_brightness = 50 if extra_light.brightness != 50 else 75
+            await check(
+                f"light_fixture({extra_light.address}, brightness=...)",
+                fan.light_fixture(
+                    extra_light.address, brightness=target_light_fixture_brightness
+                ),
+                light_fixture_brightness_matches(
+                    extra_light.address, target_light_fixture_brightness
+                ),
+            )
 
         target_speed = 2 if original.fan_speed != 2 else 3
         await check(
@@ -263,34 +386,37 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
             ),
         )
 
-        await check(
-            "fan(sleep=90) [set timer]",
-            fan.fan(sleep=90),
-            lambda: (
-                (
-                    fan.status.fan_timer
-                    if relative_timers
-                    else fan.status.fan_sleep_timer
-                )
-                != 0,
-                f"fan_timer={fan.status.fan_timer} "
-                f"fan_sleep_timer={fan.status.fan_sleep_timer}",
-            ),
-        )
-        await check(
-            "fan(sleep=0) [cancel timer]",
-            fan.fan(sleep=0),
-            lambda: (
-                (
-                    fan.status.fan_timer
-                    if relative_timers
-                    else fan.status.fan_sleep_timer
-                )
-                == 0,
-                f"fan_timer={fan.status.fan_timer} "
-                f"fan_sleep_timer={fan.status.fan_sleep_timer}",
-            ),
-        )
+        if supports_sleep_timer:
+            await check(
+                "fan(sleep=90) [set timer]",
+                fan.fan(sleep=90),
+                lambda: (
+                    (
+                        fan.status.fan_timer
+                        if relative_timers
+                        else fan.status.fan_sleep_timer
+                    )
+                    != 0,
+                    f"fan_timer={fan.status.fan_timer} "
+                    f"fan_sleep_timer={fan.status.fan_sleep_timer}",
+                ),
+            )
+            await check(
+                "fan(sleep=0) [cancel timer]",
+                fan.fan(sleep=0),
+                lambda: (
+                    (
+                        fan.status.fan_timer
+                        if relative_timers
+                        else fan.status.fan_sleep_timer
+                    )
+                    == 0,
+                    f"fan_timer={fan.status.fan_timer} "
+                    f"fan_sleep_timer={fan.status.fan_sleep_timer}",
+                ),
+            )
+        else:
+            out.append("- ⏭️ Sleep timer: not supported on this device (skipped)")
 
         if supports_wind:
             target_wind_speed = 2 if original.wind_speed != 2 else 1
@@ -342,6 +468,12 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
         restore_error = None
         try:
             await fan.light(on=original.light_on, brightness=original.light_brightness)
+            for extra_light in original.light_fixtures[1:]:
+                await fan.light_fixture(
+                    extra_light.address,
+                    on=extra_light.on,
+                    brightness=extra_light.brightness,
+                )
             fan_kwargs: dict[str, Any] = {
                 "on": original.fan_on,
                 "speed": original.fan_speed,
@@ -360,7 +492,7 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
             restore_error = exc
 
         restored = fan.status
-        restore_checks = {
+        restore_checks: dict[str, tuple[Any, Any]] = {
             "light_on": (restored.light_on, original.light_on),
             "light_brightness": (restored.light_brightness, original.light_brightness),
             "fan_on": (restored.fan_on, original.fan_on),
@@ -371,6 +503,23 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
                 original.away_mode_enabled,
             ),
         }
+        for extra_light in original.light_fixtures[1:]:
+            restored_light = next(
+                (
+                    fx
+                    for fx in restored.light_fixtures
+                    if fx.address == extra_light.address
+                ),
+                None,
+            )
+            restore_checks[f"light_fixture[{extra_light.address}].on"] = (
+                restored_light.on if restored_light else None,
+                extra_light.on,
+            )
+            restore_checks[f"light_fixture[{extra_light.address}].brightness"] = (
+                restored_light.brightness if restored_light else None,
+                extra_light.brightness,
+            )
         fully_restored = restore_error is None and all(
             got == want for got, want in restore_checks.values()
         )
@@ -407,6 +556,162 @@ async def run_active_tests(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
     return out
 
 
+async def _gather_legacy_report(fan: aiomodernforms.ModernFormsDevice) -> list[str]:
+    """Build the gen1_2/gen3-specific portion of the diagnostic report."""
+    out: list[str] = []
+    try:
+        static_raw = await fan._request(  # pylint: disable=protected-access
+            {const.COMMAND_QUERY_STATIC_DATA: True}
+        )
+        dynamic_raw = await fan._request()  # pylint: disable=protected-access
+    except aiomodernforms.ModernFormsError as err:
+        out.append(f"\n**Could not reach the device's `/mf` endpoint:** `{err}`")
+        return out
+
+    device = Device(state_data=dynamic_raw, info_data=static_raw)
+    fan._device = device  # pylint: disable=protected-access
+
+    out.append(_section("Parsed capability flags"))
+    out.append(f"- `has_wind()` (Breeze mode support): `{device.has_wind()}`")
+    out.append(
+        "- `has_relative_timers()` (Gen 3 seconds-until-off sleep timers): "
+        f"`{device.has_relative_timers()}`"
+    )
+
+    out.append(_section("Raw static shadow data (queryStaticShadowData)"))
+    out.append(_json_block(redact(static_raw)))
+    extra = list(unknown_keys(static_raw, STATIC_KNOWN_KEYS))
+    if extra:
+        out.append(f"\n**Unrecognized keys:** `{extra}`")
+
+    out.append(_section("Raw dynamic shadow data (queryDynamicShadowData)"))
+    out.append(_json_block(redact(dynamic_raw)))
+    extra = list(unknown_keys(dynamic_raw, DYNAMIC_KNOWN_KEYS))
+    if extra:
+        out.append(f"\n**Unrecognized keys:** `{extra}`")
+
+    out.append(_section("Raw /config-read data"))
+    try:
+        config_raw = await fan._request(  # pylint: disable=protected-access
+            commands={}, path=const.CONFIG_READ_API_ENDPOINT
+        )
+        out.append(_json_block(redact(config_raw)))
+        extra = list(unknown_keys(config_raw, CONFIG_KNOWN_KEYS))
+        if extra:
+            out.append(f"\n**Unrecognized keys:** `{extra}`")
+        config = ConfigInfo.from_dict(config_raw)
+        if not config.wifi_strength:
+            out.append(
+                "\n**Note:** `wifi_strength` came back empty — this "
+                "firmware may use a Wi-Fi signal key this library "
+                "doesn't recognize yet."
+            )
+    except aiomodernforms.ModernFormsError as err:
+        out.append(f"`/config-read` request failed: `{err}`")
+
+    return out
+
+
+async def _gather_gen4_report(
+    fan: aiomodernforms.ModernFormsDevice, device_raw: dict[str, Any]
+) -> list[str]:
+    """Build the Gen4-specific portion of the diagnostic report.
+
+    Also populates `fan._device`/`fan._gen4_fan_addr` from the raw `/device`
+    + `/fixture` responses gathered here, mirroring what
+    `ModernFormsDevice._update_gen4()` does internally — so `--active`'s
+    `run_active_tests()` (and its `has_adaptive_learning()`/
+    `has_sleep_timer()` capability checks) has a populated device to test
+    against without an extra `update()` round trip through `/mf` + `/device`
+    again.
+    """
+    out = [_section("Raw /device data")]
+    out.append(_json_block(redact(device_raw)))
+    extra = list(unknown_keys(device_raw, GEN4_DEVICE_KNOWN_KEYS))
+    if extra:
+        out.append(f"\n**Unrecognized keys:** `{extra}`")
+
+    out.append(_section("Raw /fixture read-all data"))
+    try:
+        fixture_raw = await fan._request(  # pylint: disable=protected-access
+            {const.GEN4_FIELD_ACTION: const.GEN4_FIXTURE_ACTION_READ},
+            path=const.GEN4_FIXTURE_API_ENDPOINT,
+        )
+    except aiomodernforms.ModernFormsError as err:
+        out.append(f"`/fixture` read-all request failed: `{err}`")
+        return out
+
+    out.append(_json_block(redact(fixture_raw)))
+    fixtures = fixture_raw.get(const.GEN4_FIELD_FIXTURE_LIST, [])
+    out.append(
+        f"\n**Discovered {len(fixtures)} fixture(s):** "
+        + ", ".join(
+            f"type {f.get(const.GEN4_FIELD_TYPE)} @ {f.get(const.GEN4_FIELD_ADDR)}"
+            for f in fixtures
+        )
+    )
+    for fixture in fixtures:
+        fixture_extra = list(unknown_keys(fixture, GEN4_FIXTURE_KNOWN_KEYS))
+        if fixture_extra:
+            out.append(
+                "\n**Unrecognized keys on fixture "
+                f"{fixture.get(const.GEN4_FIELD_ADDR)}:** `{fixture_extra}`"
+            )
+
+    # Some real Gen4 fans omit `state` from the read-all response entirely
+    # (confirmed against real hardware, see GitHub issue #287), even though
+    # the PDF documents read-all as including it. Fall back to an
+    # individual read (action 3 + addr) per fixture missing it, and show
+    # the raw response so this is visible in the report.
+    filled_fixtures = []
+    for fixture in fixtures:
+        if const.GEN4_FIELD_STATE in fixture:
+            filled_fixtures.append(fixture)
+            continue
+        addr = fixture.get(const.GEN4_FIELD_ADDR)
+        if addr is None:
+            filled_fixtures.append(fixture)
+            continue
+        try:
+            single = await fan._request(  # pylint: disable=protected-access
+                {
+                    const.GEN4_FIELD_ACTION: const.GEN4_FIXTURE_ACTION_READ,
+                    const.GEN4_FIELD_ADDR: addr,
+                },
+                path=const.GEN4_FIXTURE_API_ENDPOINT,
+            )
+        except aiomodernforms.ModernFormsError as err:
+            out.append(f"\nIndividual read for fixture {addr} failed: `{err}`")
+            filled_fixtures.append(fixture)
+            continue
+        out.append(_section(f"Raw individual /fixture read (addr {addr})"))
+        out.append(
+            "*(this device's read-all response omitted `state` for this "
+            "fixture, so an individual read was needed)*"
+        )
+        out.append(_json_block(redact(single)))
+        merged = dict(fixture)
+        if const.GEN4_FIELD_STATE in single:
+            merged[const.GEN4_FIELD_STATE] = single[const.GEN4_FIELD_STATE]
+        if const.GEN4_FIELD_DETAIL in single:
+            merged[const.GEN4_FIELD_DETAIL] = single[const.GEN4_FIELD_DETAIL]
+        filled_fixtures.append(merged)
+    fixtures = filled_fixtures
+
+    fan_fixture, light_fixtures = gen4.classify_fixtures(fixtures)
+    fan._gen4_fan_addr = (fan_fixture or {}).get(  # pylint: disable=protected-access
+        const.GEN4_FIELD_ADDR
+    )
+    state_data = gen4.build_state_data(device_raw, fan_fixture, light_fixtures)
+    info_data = gen4.build_info_data(device_raw, fan_fixture, light_fixtures)
+    fan._device = Device(  # pylint: disable=protected-access
+        state_data=state_data, info_data=info_data, generation=Generation.GEN4
+    )
+    fan._is_gen4 = True  # pylint: disable=protected-access
+
+    return out
+
+
 async def gather_report(
     host: str,
     port: int,
@@ -425,56 +730,27 @@ async def gather_report(
         host, port=port, tls=tls, username=username, password=password
     ) as fan:
         try:
-            static_raw = await fan._request(  # pylint: disable=protected-access
-                {const.COMMAND_QUERY_STATIC_DATA: True}
+            device_raw = await fan._request(  # pylint: disable=protected-access
+                {const.GEN4_DEVICE_QUERY: True}, path=const.GEN4_DEVICE_API_ENDPOINT
             )
-            dynamic_raw = await fan._request()  # pylint: disable=protected-access
-        except aiomodernforms.ModernFormsError as err:
-            out.append(f"\n**Could not reach the device's `/mf` endpoint:** `{err}`")
-            return "\n".join(out)
+        except (aiomodernforms.ModernFormsError, aiohttp.ClientError):
+            # Best-effort probe, matching _probe_gen4()'s identical handling
+            # in modernforms.py: a non-JSON 200 response (HTML error page,
+            # captive portal, any non-fan device at this host) raises
+            # aiohttp's own exception from response.json() rather than a
+            # library one, since that call sits outside _request()'s normal
+            # aiohttp.ClientError-to-ModernFormsError translation. Either
+            # failure just means "fall back to the legacy report" here.
+            device_raw = None
 
-        device = Device(state_data=dynamic_raw, info_data=static_raw)
-        fan._device = device  # pylint: disable=protected-access
+        if device_raw is not None and gen4.is_gen4_system_type(
+            device_raw.get(const.GEN4_DEVICE_SYSTEM_TYPE, "")
+        ):
+            out.extend(await _gather_gen4_report(fan, device_raw))
+        else:
+            out.extend(await _gather_legacy_report(fan))
 
-        out.append(_section("Parsed capability flags"))
-        out.append(f"- `has_wind()` (Breeze mode support): `{device.has_wind()}`")
-        out.append(
-            "- `has_relative_timers()` (Gen 3 seconds-until-off sleep timers): "
-            f"`{device.has_relative_timers()}`"
-        )
-
-        out.append(_section("Raw static shadow data (queryStaticShadowData)"))
-        out.append(_json_block(redact(static_raw)))
-        extra = list(unknown_keys(static_raw, STATIC_KNOWN_KEYS))
-        if extra:
-            out.append(f"\n**Unrecognized keys:** `{extra}`")
-
-        out.append(_section("Raw dynamic shadow data (queryDynamicShadowData)"))
-        out.append(_json_block(redact(dynamic_raw)))
-        extra = list(unknown_keys(dynamic_raw, DYNAMIC_KNOWN_KEYS))
-        if extra:
-            out.append(f"\n**Unrecognized keys:** `{extra}`")
-
-        out.append(_section("Raw /config-read data"))
-        try:
-            config_raw = await fan._request(  # pylint: disable=protected-access
-                commands={}, path=const.CONFIG_READ_API_ENDPOINT
-            )
-            out.append(_json_block(redact(config_raw)))
-            extra = list(unknown_keys(config_raw, CONFIG_KNOWN_KEYS))
-            if extra:
-                out.append(f"\n**Unrecognized keys:** `{extra}`")
-            config = ConfigInfo.from_dict(config_raw)
-            if not config.wifi_strength:
-                out.append(
-                    "\n**Note:** `wifi_strength` came back empty — this "
-                    "firmware may use a Wi-Fi signal key this library "
-                    "doesn't recognize yet."
-                )
-        except aiomodernforms.ModernFormsError as err:
-            out.append(f"`/config-read` request failed: `{err}`")
-
-        if active:
+        if active and fan._device is not None:  # pylint: disable=protected-access
             out.extend(await run_active_tests(fan))
 
     return "\n".join(out)
@@ -482,6 +758,16 @@ async def gather_report(
 
 def main() -> None:
     """Parse arguments and print the diagnostic report."""
+    # The report uses emoji (✅/❌/⏭️) as status markers; Windows terminals
+    # default stdout/stderr to the system codepage (e.g. cp1252) rather
+    # than UTF-8, which raises UnicodeEncodeError on print(). Reconfigure
+    # is Python 3.7+ and only available on real text streams, not when
+    # stdout is replaced (e.g. under pytest's capture) — hence the guard.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(
         description=(
             "Connect to a Modern Forms / WAC fan and print a redacted "

@@ -8,12 +8,22 @@ import aiohttp
 import pytest
 
 import aiomodernforms
+from aiomodernforms import gen4
 from aiomodernforms.const import (
     ADAPTIVE_LEARNING_ON,
     AWAY_MODE_ON,
+    COMMAND_IDENTIFY,
+    COMMAND_LIGHT_COLOR_TEMP,
     COMMAND_QUERY_STATIC_DATA,
     FAN_SPEED_HIGH_VALUE,
     FAN_SPEED_LOW_VALUE,
+    INFO_DEVICE_NAME,
+    INFO_FAN_TYPE,
+    INFO_FIRMWARE_VERSION,
+    INFO_LIGHT_TYPE,
+    INFO_MAC,
+    INFO_MAIN_MCU_FIRMWARE_VERSION,
+    INFO_OWNER,
     LIGHT_BRIGHTNESS_HIGH_VALUE,
     LIGHT_BRIGHTNESS_LOW_VALUE,
     STATE_ADAPTIVE_LEARNING,
@@ -24,6 +34,8 @@ from aiomodernforms.const import (
     STATE_FAN_SPEED,
     STATE_FAN_TIMER,
     STATE_LIGHT_BRIGHTNESS,
+    STATE_LIGHT_COLOR_TEMP,
+    STATE_LIGHT_FIXTURES,
     STATE_LIGHT_POWER,
     STATE_LIGHT_SLEEP_TIMER,
     STATE_LIGHT_TIMER,
@@ -36,7 +48,16 @@ from aiomodernforms.exceptions import (
     ModernFormsConnectionTimeoutError,
     ModernFormsEmptyResponseError,
     ModernFormsNotInitializedError,
+    ModernFormsNotSupportedError,
 )
+from aiomodernforms.models import Device, Generation, State
+
+
+def test_not_supported_error_is_an_exception():
+    """Test that ModernFormsNotSupportedError exists and is a real exception."""
+    with pytest.raises(ModernFormsNotSupportedError):
+        raise ModernFormsNotSupportedError("not supported on this generation")
+
 
 basic_response = {
     "adaptiveLearning": False,
@@ -189,6 +210,266 @@ real_gen2_wifi_signal_config_response = {
     "wifiSignal": "-62",
 }
 
+gen4_device_response = {
+    "systemType": "fan_g4",
+    "deviceName": "Fan",
+    "owner": "someone@somewhere.com",
+    "iotmVer": "01.00.0082",
+    "scmVer": "01.00.0012",
+    "awayModeEnabled": False,
+    "staMac": "AA:BB:CC:DD:EE:FF",
+    "nwkState": {
+        "certificateID": "abc123certid",
+        "rssi": "-42",
+    },
+}
+
+gen4_fan_fixture = {
+    "addr": 218103808,
+    "name": "Fan",
+    "type": 13,
+    "state": {
+        "status": False,
+        "fanSpeed": 3,
+        "fanDirection": False,
+        "wind": False,
+        "windSpeed": 2,
+    },
+    "detail": {
+        "model": "2603-56",
+    },
+}
+
+gen4_light_fixture = {
+    "addr": 83951616,
+    "name": "Light",
+    "type": 1,
+    "state": {
+        "status": False,
+        "level": 5000,
+        "mixColorTemp": 3000,
+    },
+    "detail": {
+        "minColorTemp": 2700,
+        "maxColorTemp": 5000,
+    },
+}
+
+gen4_wall_station_fixture = {
+    "addr": 184549376,
+    "name": "Remote",
+    "type": 11,
+    "state": {},
+}
+
+
+def _mock_gen4_device(aresponses, fixtures=None):
+    """Register the request sequence a Gen4 device's first update() makes.
+
+    update() tries /mf first (so legacy fans need no special mocking) and
+    only falls back to probing /device when that fails — so every Gen4 test
+    must mock /mf failing first, then /device, then /fixture, in that order.
+    """
+    aresponses.add(
+        "fan.local",
+        "/mf",
+        "POST",
+        response=aresponses.Response(text="not found", status=404),
+    )
+    aresponses.add("fan.local", "/device", "POST", response=gen4_device_response)
+    fixture_list = (
+        fixtures if fixtures is not None else [gen4_fan_fixture, gen4_light_fixture]
+    )
+    aresponses.add(
+        "fan.local",
+        "/fixture",
+        "POST",
+        response={
+            "action": 3,
+            "result": "0",
+            "count": len(fixture_list),
+            "fixture": fixture_list,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_detects_gen4(aresponses):
+    """Test that update() falls back to /device and detects a Gen4 fan."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device._device.generation == Generation.GEN4
+        assert device.status.fan_speed == 3
+        assert device.status.light_brightness == 50
+        assert len(device.status.light_fixtures) == 1
+        assert device.info.device_name == "Fan"
+        assert device.info.mac_address == "AA:BB:CC:DD:EE:FF"
+        assert device.info.light_type == "gen4"
+        assert device.info.fan_type == "2603-56"
+        assert device._gen4_fan_addr == 218103808
+
+
+@pytest.mark.asyncio
+async def test_update_gen4_fills_missing_fixture_state_via_individual_read(
+    aresponses,
+):
+    """Test that a read-all response without `state` triggers a fallback.
+
+    Real Gen4 hardware has been observed returning only identity fields
+    (addr/type/name/model/online) from `/fixture` read-all, omitting
+    `state` entirely — unlike the PDF, which documents read-all as
+    including it (see GitHub issue #287). update() must fall back to an
+    individual read (action 3 + addr) per such fixture and merge its
+    state in, rather than treating the fixture as having no state at all.
+    """
+    aresponses.add(
+        "fan.local",
+        "/mf",
+        "POST",
+        response=aresponses.Response(text="not found", status=404),
+    )
+    aresponses.add("fan.local", "/device", "POST", response=gen4_device_response)
+
+    fan_fixture_no_state = {
+        "addr": 218103808,
+        "name": "Fan",
+        "type": 13,
+        "model": "65-3062",
+        "online": True,
+    }
+    light_fixture_no_state = {
+        "addr": 83951616,
+        "name": "Light",
+        "type": 1,
+        "model": "D-650-3062-U4R-F4",
+        "online": True,
+    }
+    aresponses.add(
+        "fan.local",
+        "/fixture",
+        "POST",
+        response={
+            "action": 3,
+            "result": "0",
+            "count": 2,
+            "fixture": [fan_fixture_no_state, light_fixture_no_state],
+        },
+    )
+    aresponses.add(
+        "fan.local",
+        "/fixture",
+        "POST",
+        response={"action": 3, "result": "0", **gen4_fan_fixture},
+    )
+    aresponses.add(
+        "fan.local",
+        "/fixture",
+        "POST",
+        response={"action": 3, "result": "0", **gen4_light_fixture},
+    )
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.fan_speed == 3
+        assert device.status.wind is False
+        assert device.status.light_brightness == 50
+        assert device.status.light_fixtures[0].min_color_temp_kelvin == 2700
+
+
+@pytest.mark.asyncio
+async def test_update_uses_legacy_without_probing_device(aresponses):
+    """Test that update() never touches /device when /mf succeeds immediately."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device._device.generation == Generation.GEN1_2
+        assert device.status.fan_speed == basic_response["fanSpeed"]
+        # No /device mock was registered above — if update() had probed it,
+        # aresponses would raise a route-not-found error for that request.
+
+
+@pytest.mark.asyncio
+async def test_update_reraises_legacy_error_when_device_also_not_gen4(aresponses):
+    """Test that a device failing both /mf and /device surfaces the /mf error."""
+    aresponses.add(
+        "fan.local",
+        "/mf",
+        "POST",
+        response=aresponses.Response(text="not found", status=404),
+    )
+    aresponses.add(
+        "fan.local",
+        "/device",
+        "POST",
+        response=aresponses.Response(text="not found", status=404),
+    )
+
+    with pytest.raises(aiomodernforms.ModernFormsError):
+        async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+            await device.update()
+
+
+@pytest.mark.asyncio
+async def test_update_probe_handles_non_json_response(aresponses):
+    """Test that a non-JSON 200 response from /device doesn't crash update().
+
+    Regression test: _probe_gen4() only caught ModernFormsError, but the
+    `await response.json()` call in _request() sits outside the
+    aiohttp.ClientError-to-ModernFormsError translation — so a device that
+    answers `POST /device` with HTTP 200 and a non-JSON body (an HTML
+    error page, a captive portal, any non-fan device at this host) used to
+    raise a raw aiohttp.ContentTypeError straight out of update(), instead
+    of falling through to the original /mf error like every other probe
+    failure.
+    """
+    aresponses.add(
+        "fan.local",
+        "/mf",
+        "POST",
+        response=aresponses.Response(text="not found", status=404),
+    )
+    aresponses.add(
+        "fan.local",
+        "/device",
+        "POST",
+        response=aresponses.Response(
+            text="<html>captive portal</html>", status=200, content_type="text/html"
+        ),
+    )
+
+    with pytest.raises(aiomodernforms.ModernFormsError):
+        async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+            await device.update()
+
+
+@pytest.mark.asyncio
+async def test_update_only_probes_gen4_once(aresponses):
+    """Test that a second update() call skips straight to /device + /fixture."""
+    _mock_gen4_device(aresponses)
+    aresponses.add("fan.local", "/device", "POST", response=gen4_device_response)
+    aresponses.add(
+        "fan.local",
+        "/fixture",
+        "POST",
+        response={
+            "action": 3,
+            "result": "0",
+            "count": 2,
+            "fixture": [gen4_fan_fixture, gen4_light_fixture],
+        },
+    )
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.update()
+        # The second update() call has no /mf mock registered and only one
+        # more /device + /fixture pair above — if it had re-attempted /mf or
+        # re-probed generation an extra time, aresponses would raise.
+
 
 @pytest.mark.asyncio
 async def test_basic_status(aresponses):
@@ -308,6 +589,24 @@ async def test_config_uses_config_read_path(aresponses):
         config = await device.config()
         assert device.status.fan_on == basic_response["fanOn"]
         assert config.device_name == "MF_Fan_98E5AC"
+
+
+@pytest.mark.asyncio
+async def test_config_gen4(aresponses):
+    """Test config() against a Gen4 device — maps /device fields into ConfigInfo."""
+    _mock_gen4_device(aresponses)
+    aresponses.add("fan.local", "/device", "POST", response=gen4_device_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        config = await device.config()
+        assert config.device_name == "Fan"
+        assert config.firmware_version == "01.00.0082"
+        assert config.rf_version == "01.00.0012"
+        assert config.certificate_id == "abc123certid"
+        assert config.wifi_strength == "-42"
+        assert config.hardware_revision == ""
+        assert config.protocol == ""
 
 
 @pytest.mark.asyncio
@@ -566,6 +865,29 @@ async def test_light_on_with_brightness_no_sleep(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_light_invalid_sleep_raises_before_any_request(aresponses):
+    """Test that an invalid `sleep` value raises before any request is sent.
+
+    Regression test: light(brightness=..., on=True, sleep=<invalid>) used
+    to send the brightness-only request (from the brightness/on split
+    below) before the invalid `sleep` value was ever validated, leaving
+    the device half-mutated. Only the update() mocks are registered here
+    — if light() sent anything before raising, this test would fail with
+    a route-not-found error instead of the expected
+    ModernFormsInvalidSettingsError.
+    """
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    invalid_sleep = datetime.now() + timedelta(hours=25)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.light(brightness=50, on=True, sleep=invalid_sleep)
+
+
+@pytest.mark.asyncio
 async def test_light_sleep_datetime(aresponses):
     """Test to make sure setting light sleep works."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
@@ -702,6 +1024,37 @@ async def test_fan(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_fan_identify_ignored_on_legacy(aresponses):
+    """Test that identify is silently dropped for gen1_2/gen3, never sent.
+
+    Regression test: identify previously had no generation gate, so
+    fan(identify=True) sent {"identify": true} to /mf on legacy fans,
+    contradicting the design spec's "silently ignored otherwise" — which
+    means never sent at all, not sent-and-ignored-by-the-device.
+    """
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_FAN_POWER in data
+        assert COMMAND_IDENTIFY not in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_FAN_POWER] = data[aiomodernforms.COMMAND_FAN_POWER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.fan(on=True, identify=True)
+
+
+@pytest.mark.asyncio
 async def test_fan_with_breeze_mode(aresponses):
     """Test to make sure setting fan breeze mode support works."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
@@ -785,6 +1138,109 @@ async def test_nonupdated_device_for_relative_timers():
     with pytest.raises(ModernFormsNotInitializedError):
         async with aiomodernforms.ModernFormsDevice("fan.local") as device:
             device.has_relative_timers()
+
+
+@pytest.mark.asyncio
+async def test_generation_defaults_gen1_2(aresponses):
+    """Test that a device with no relative timers is classified gen1_2."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device._device.generation == Generation.GEN1_2
+        assert device._device.has_adaptive_learning() is True
+        assert device._device.has_sleep_timer() is True
+        assert device._device.has_identify() is False
+
+
+@pytest.mark.asyncio
+async def test_generation_gen3_from_relative_timers(aresponses):
+    """Test that a device with relative timers is classified gen3."""
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_info)
+    aresponses.add("fan.local", "/mf", "POST", response=gen3_relative_timer_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device._device.generation == Generation.GEN3
+
+
+def test_generation_gen1_2_when_timer_keys_present_but_none():
+    """Test that None-valued timer keys don't misclassify a device as gen3.
+
+    Regression test: _infer_generation() used to check only key presence
+    (`STATE_FAN_TIMER in state_data`), not value. A dict carrying these
+    keys with an explicit None — as one built from State.to_dict() would,
+    though that path always passes an explicit generation and never
+    reaches this inference — would have been misclassified as gen3.
+    """
+    data = {**basic_response, STATE_FAN_TIMER: None, STATE_LIGHT_TIMER: None}
+    device = Device(state_data=data, info_data=basic_info)
+    assert device.generation == Generation.GEN1_2
+
+
+def test_light_fixtures_synthetic_entry_for_legacy():
+    """Test that gen1_2/gen3 responses get a single synthetic Light entry."""
+    device = Device(state_data=basic_response, info_data=basic_info)
+    assert len(device.state.light_fixtures) == 1
+    light = device.state.light_fixtures[0]
+    assert light.address is None
+    assert light.fixture_type is None
+    assert light.on == basic_response["lightOn"]
+    assert light.brightness == basic_response["lightBrightness"]
+    assert light.color_temp_kelvin is None
+    assert light.min_color_temp_kelvin is None
+    assert light.max_color_temp_kelvin is None
+    assert device.state.light_color_temp_kelvin is None
+
+
+def test_from_dict_respects_explicit_empty_light_fixtures():
+    """Test that an explicit empty light_fixtures list is not overridden.
+
+    Regression test for commit 7049132: State.from_dict() must check for
+    `None` rather than falsiness when deciding whether to synthesize a
+    legacy light entry, since Gen4's read-all response can legitimately
+    send an explicit empty list for a fan with no light fixtures installed.
+    """
+    data = {**basic_response, STATE_LIGHT_FIXTURES: []}
+    state = State.from_dict(data)
+    assert not state.light_fixtures
+
+
+def test_from_dict_missing_light_fixtures_key_uses_synthetic_default():
+    """Test that a missing light_fixtures key still synthesizes a legacy entry.
+
+    Companion to test_from_dict_respects_explicit_empty_light_fixtures —
+    confirms the pre-existing legacy behavior (gen1_2/gen3 responses never
+    send a light_fixtures key at all) still works after the None-check fix.
+    """
+    assert STATE_LIGHT_FIXTURES not in basic_response
+    state = State.from_dict(basic_response)
+    assert len(state.light_fixtures) == 1
+    light = state.light_fixtures[0]
+    assert light.address is None
+    assert light.on == basic_response["lightOn"]
+    assert light.brightness == basic_response["lightBrightness"]
+
+
+def test_state_to_dict_round_trips_through_from_dict():
+    """Test that State.to_dict() is the inverse of State.from_dict()."""
+    device = Device(state_data=gen3_relative_timer_response, info_data=gen3_info)
+    round_tripped = State.from_dict(device.state.to_dict())
+    assert round_tripped == device.state
+
+
+def test_device_accepts_explicit_generation():
+    """Test that Device.__init__ honors an explicitly passed generation."""
+    device = Device(
+        state_data=basic_response,
+        info_data=basic_info,
+        generation=Generation.GEN4,
+    )
+    assert device.generation == Generation.GEN4
+    assert device.has_adaptive_learning() is False
+    assert device.has_sleep_timer() is False
+    assert device.has_identify() is True
 
 
 @pytest.mark.asyncio
@@ -1024,6 +1480,358 @@ async def test_fan_sleep_clear(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_fan_gen4_sends_to_fixture_endpoint(aresponses):
+    """Test that fan() on a Gen4 device posts to /fixture with the real addr."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["action"] == 4
+        assert data["addr"] == 218103808
+        assert data["state"] == {"status": True, "fanSpeed": 5}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(
+                {
+                    "action": 4,
+                    "result": "0",
+                    "state": {"status": True, "fanSpeed": 5},
+                }
+            ),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.fan(on=True, speed=5)
+        assert device.status.fan_on is True
+        assert device.status.fan_speed == 5
+        # Fields not touched by this call stay at their pre-call values.
+        assert device.status.light_brightness == 50
+
+
+@pytest.mark.asyncio
+async def test_fan_gen4_identify(aresponses):
+    """Test that fan(identify=True) sends findme to the fixture."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["state"] == {"findme": True}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps({"action": 4, "result": "0", "state": {}}),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.fan(identify=True)
+
+
+@pytest.mark.asyncio
+async def test_fan_rejects_non_bool_identify(aresponses):
+    """Test that fan(identify=...) validates its type.
+
+    Regression test (Copilot suggestion on #289): identify was forwarded
+    to the Gen4 command dict without type validation, unlike on/wind.
+    """
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.fan(identify="yes")
+
+
+@pytest.mark.asyncio
+async def test_fan_gen4_raises_when_no_fan_fixture_found(aresponses):
+    """Test that fan() raises cleanly when /fixture read-all has no fan fixture.
+
+    Regression test (Copilot suggestion on #289): _gen4_fan_addr stays None
+    when classify_fixtures() finds no GEN4_FIXTURE_TYPE_FAN-typed fixture.
+    Previously fan() would send {"addr": null} to /fixture in that case —
+    the same silent-no-op/confusing-device class of bug light_fixture()'s
+    address=None guard already fixed — instead of raising a clear error.
+    """
+    _mock_gen4_device(aresponses, fixtures=[gen4_light_fixture])
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.fan(speed=3)
+
+
+@pytest.mark.asyncio
+async def test_fan_gen4_sleep_is_a_silent_noop(aresponses):
+    """Test that fan(sleep=...) on Gen4 sends no timer field at all."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["state"] == {"status": True}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps({"action": 4, "result": "0", "state": {"status": True}}),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.fan(on=True, sleep=90)
+
+
+@pytest.mark.asyncio
+async def test_light_gen4_sends_to_primary_fixture(aresponses):
+    """Test that light() on Gen4 controls light_fixtures[0]'s real address."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["addr"] == 83951616
+        assert data["state"] == {"status": True, "level": 8000}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(
+                {"action": 4, "result": "0", "state": {"status": True, "level": 8000}}
+            ),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(on=True, brightness=80)
+        assert device.status.light_on is True
+        assert device.status.light_brightness == 80
+        assert device.status.light_fixtures[0].on is True
+        assert device.status.light_fixtures[0].brightness == 80
+
+
+@pytest.mark.asyncio
+async def test_light_gen4_no_fixtures_raises_not_supported(aresponses):
+    """Test that light() raises cleanly on a Gen4 fan with no light fixtures.
+
+    Regression test: light() used to index light_fixtures[0] unconditionally,
+    which raised a bare IndexError (not a library exception) on a genuinely
+    light-less Gen4 fan — a case that became reachable once State.from_dict()
+    was fixed (commit 7049132) to respect an explicit empty light_fixtures
+    list instead of always synthesizing a placeholder entry.
+    """
+    _mock_gen4_device(aresponses, fixtures=[gen4_fan_fixture])
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert device.status.light_fixtures == []
+        assert device.info.light_type == ""
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.light(on=True)
+
+
+@pytest.mark.asyncio
+async def test_light_gen4_color_temp(aresponses):
+    """Test that light(color_temp_kelvin=...) sends mixColorTemp."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["state"] == {"mixColorTemp": 4500}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(
+                {"action": 4, "result": "0", "state": {"mixColorTemp": 4500}}
+            ),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(color_temp_kelvin=4500)
+        assert device.status.light_color_temp_kelvin == 4500
+
+
+@pytest.mark.asyncio
+async def test_light_color_temp_ignored_on_legacy(aresponses):
+    """Test that color_temp_kelvin is silently dropped for gen1_2/gen3."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_POWER in data
+        assert COMMAND_LIGHT_COLOR_TEMP not in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(on=True, color_temp_kelvin=4500)
+
+
+@pytest.mark.asyncio
+async def test_light_identify_ignored_on_legacy(aresponses):
+    """Test that identify is silently dropped for gen1_2/gen3, never sent.
+
+    Regression test: identify previously had no generation gate, so
+    light(identify=True) sent {"identify": true} to /mf on legacy fans,
+    contradicting the design spec's "silently ignored otherwise" — which
+    means never sent at all, not sent-and-ignored-by-the-device.
+    """
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_POWER in data
+        assert COMMAND_IDENTIFY not in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light(on=True, identify=True)
+
+
+@pytest.mark.asyncio
+async def test_light_fixture_controls_a_specific_address(aresponses):
+    """Test that light_fixture() addresses a light directly, not via index 0."""
+    second_light = {**gen4_light_fixture, "addr": 83951617, "name": "Uplight"}
+    _mock_gen4_device(
+        aresponses, fixtures=[gen4_fan_fixture, gen4_light_fixture, second_light]
+    )
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data["addr"] == 83951617
+        assert data["state"] == {"status": True}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps({"action": 4, "result": "0", "state": {"status": True}}),
+        )
+
+    aresponses.add("fan.local", "/fixture", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        assert len(device.status.light_fixtures) == 2
+        await device.light_fixture(83951617, on=True)
+        assert device.status.light_fixtures[1].on is True
+        # The primary light (index 0) and its flat mirror fields are untouched.
+        assert device.status.light_fixtures[0].on is False
+        assert device.status.light_on is False
+
+
+@pytest.mark.asyncio
+async def test_light_fixture_none_address_routes_through_legacy(aresponses):
+    """Test that light_fixture(None, ...) works on gen1_2/gen3 like light()."""
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert aiomodernforms.COMMAND_LIGHT_POWER in data
+        modified_response = basic_response.copy()
+        modified_response[STATE_LIGHT_POWER] = data[aiomodernforms.COMMAND_LIGHT_POWER]
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps(modified_response),
+        )
+
+    aresponses.add("fan.local", "/mf", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.light_fixture(None, on=True)
+        assert device.status.light_on is True
+
+
+@pytest.mark.asyncio
+async def test_light_fixture_none_address_raises_on_gen4(aresponses):
+    """Test that light_fixture(None, ...) is rejected on a Gen4 device.
+
+    Regression test: None only ever means "the gen1_2/gen3 synthetic
+    entry" — a Gen4 device has no such thing, and previously this would
+    have silently sent {"addr": null} to /fixture rather than raising a
+    clear library exception.
+    """
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.light_fixture(None, on=True)
+
+
+@pytest.mark.asyncio
+async def test_light_fixture_rejects_non_int_address(aresponses):
+    """Test that light_fixture() rejects a non-int, non-None address.
+
+    Regression test (Copilot suggestion on #289): a bad address type used
+    to be forwarded to /fixture as-is instead of raising a clear error,
+    unlike every other parameter here.
+    """
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.light_fixture("not-an-address", on=True)
+
+
+@pytest.mark.asyncio
+async def test_light_fixture_rejects_invalid_color_temp_and_identify_types(aresponses):
+    """Test that light_fixture() validates color_temp_kelvin and identify types.
+
+    Regression test (Copilot suggestion on #289): both were forwarded to
+    /fixture without type validation, unlike brightness/on.
+    """
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        address = device.status.light_fixtures[0].address
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.light_fixture(address, color_temp_kelvin="warm")
+        with pytest.raises(aiomodernforms.ModernFormsInvalidSettingsError):
+            await device.light_fixture(address, identify="yes")
+
+
+def test_has_identify_true_only_for_gen4():
+    """Test has_identify() reflects generation."""
+    legacy_device = Device(state_data=basic_response, info_data=basic_info)
+    gen4_device = Device(
+        state_data=basic_response, info_data=basic_info, generation=Generation.GEN4
+    )
+    assert legacy_device.has_identify() is False
+    assert gen4_device.has_identify() is True
+
+
+@pytest.mark.asyncio
 async def test_away(aresponses):
     """Test to make sure setting away mode works."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
@@ -1073,6 +1881,61 @@ async def test_adaptive_learning(aresponses):
         await device.update()
         await device.adaptive_learning(ADAPTIVE_LEARNING_ON)
         assert device.status.adaptive_learning_enabled
+
+
+@pytest.mark.asyncio
+async def test_away_gen4_sends_to_device_endpoint(aresponses):
+    """Test that away() on Gen4 posts to /device, not /fixture or /mf."""
+    _mock_gen4_device(aresponses)
+
+    async def evaluate_request(request):
+        data = await request.json()
+        assert data == {aiomodernforms.COMMAND_AWAY_MODE: True}
+        return aresponses.Response(
+            status=200,
+            content_type="application/json",
+            text=json.dumps({"awayModeEnabled": True}),
+        )
+
+    aresponses.add("fan.local", "/device", "POST", response=evaluate_request)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.away(True)
+        assert device.status.away_mode_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_adaptive_learning_gen4_is_a_silent_noop(aresponses):
+    """Test that adaptive_learning() on Gen4 sends nothing and doesn't error."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        await device.adaptive_learning(True)
+        # No aresponses mock was registered for a follow-up /device or /mf
+        # request — if adaptive_learning() sent anything, this test would
+        # fail with a route-not-found error.
+        assert device.status.adaptive_learning_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_has_adaptive_learning_and_has_sleep_timer(aresponses):
+    """Test the two new capability wrapper methods."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as gen4_device:
+        await gen4_device.update()
+        assert gen4_device.has_adaptive_learning() is False
+        assert gen4_device.has_sleep_timer() is False
+
+    aresponses.add("fan.local", "/mf", "POST", response=basic_info)
+    aresponses.add("fan.local", "/mf", "POST", response=basic_response)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as legacy_device:
+        await legacy_device.update()
+        assert legacy_device.has_adaptive_learning() is True
+        assert legacy_device.has_sleep_timer() is True
 
 
 @pytest.mark.asyncio
@@ -1167,6 +2030,26 @@ async def test_factory_reset(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_factory_reset_never_updated_swallows_timeout():
+    """Test factory_reset() swallows a timeout from its implicit update().
+
+    Regression test: the implicit `if self._device is None: await
+    self.update()` used to sit outside the try/except that swallows
+    ModernFormsConnectionTimeoutError (matching "a successful factory
+    reset drops the connection"), so this exact scenario used to raise
+    uncaught. No aresponses mocks are registered — update() is patched
+    directly, so no HTTP request is made at all.
+    """
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        with patch(
+            "aiomodernforms.ModernFormsDevice.update",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.factory_reset()
+        assert device._device is None
+
+
+@pytest.mark.asyncio
 async def test_factory_reset_sends_command(aresponses):
     """Test that factory_reset() sends the correct wire-level payload."""
     aresponses.add("fan.local", "/mf", "POST", response=basic_info)
@@ -1201,6 +2084,22 @@ async def test_decommission(aresponses):
             side_effect=ModernFormsConnectionTimeoutError,
         ):
             await device.decommission()
+
+
+@pytest.mark.asyncio
+async def test_decommission_never_updated_swallows_timeout():
+    """Test decommission() swallows a timeout from its implicit update().
+
+    See test_factory_reset_never_updated_swallows_timeout for the full
+    regression rationale — same class of bug, same fix, same convention.
+    """
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        with patch(
+            "aiomodernforms.ModernFormsDevice.update",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.decommission()
+        assert device._device is None
 
 
 @pytest.mark.asyncio
@@ -1396,6 +2295,22 @@ async def test_reboot(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_reboot_never_updated_swallows_timeout():
+    """Test reboot() swallows a timeout from its implicit update().
+
+    See test_factory_reset_never_updated_swallows_timeout for the full
+    regression rationale — same class of bug, same fix, same convention.
+    """
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        with patch(
+            "aiomodernforms.ModernFormsDevice.update",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.reboot()
+        assert device._device is None
+
+
+@pytest.mark.asyncio
 async def test_status_not_initialized_response():
     """Test status when not initialized."""
     with pytest.raises(ModernFormsNotInitializedError):
@@ -1428,3 +2343,244 @@ async def test_empty_response():
                 autospec=True,
             ):
                 await device.update()
+
+
+def test_is_gen4_system_type_matches():
+    """Test that the fan_g4 systemType marker is recognized."""
+    assert gen4.is_gen4_system_type("fan_g4") is True
+    assert gen4.is_gen4_system_type("FAN_G4") is True
+    assert gen4.is_gen4_system_type("gen3fan") is False
+    assert gen4.is_gen4_system_type("strut") is False
+
+
+def test_classify_fixtures_splits_fan_and_lights():
+    """Test that classify_fixtures finds the fan, the light, and ignores others."""
+    fan, lights = gen4.classify_fixtures(
+        [gen4_fan_fixture, gen4_light_fixture, gen4_wall_station_fixture]
+    )
+    assert fan == gen4_fan_fixture
+    assert lights == [gen4_light_fixture]
+
+
+def test_classify_fixtures_handles_no_lights():
+    """Test that classify_fixtures returns an empty light list when none exist."""
+    fan, lights = gen4.classify_fixtures([gen4_fan_fixture])
+    assert fan == gen4_fan_fixture
+    assert not lights
+
+
+def test_build_state_data_maps_fan_and_light_fields():
+    """Test build_state_data's fan+light field mapping."""
+    state_data = gen4.build_state_data(
+        gen4_device_response, gen4_fan_fixture, [gen4_light_fixture]
+    )
+    assert state_data[STATE_FAN_POWER] is False
+    assert state_data[STATE_FAN_SPEED] == 3
+    assert state_data[STATE_FAN_DIRECTION] == "forward"
+    assert state_data[STATE_WIND_POWER] is False
+    assert state_data[STATE_WIND_SPEED] == 2
+    assert state_data[STATE_AWAY_MODE] is False
+    assert state_data[STATE_LIGHT_POWER] is False
+    assert state_data[STATE_LIGHT_BRIGHTNESS] == 50
+    assert state_data[STATE_LIGHT_COLOR_TEMP] == 3000
+
+    light_fixtures = state_data[STATE_LIGHT_FIXTURES]
+    assert len(light_fixtures) == 1
+    light = light_fixtures[0]
+    assert light.address == 83951616
+    assert light.fixture_type == 1
+    assert light.name == "Light"
+    assert light.min_color_temp_kelvin == 2700
+    assert light.max_color_temp_kelvin == 5000
+
+
+def test_build_state_data_malformed_level_falls_back_to_default():
+    """Test that a non-numeric `level` doesn't crash translation.
+
+    Regression test (Copilot suggestion on #289): a misbehaving device
+    sending `level` as a string or null used to raise a raw TypeError from
+    `raw_level / GEN4_BRIGHTNESS_SCALE`, crashing update() for the whole
+    device rather than just falling back to a sensible default.
+    """
+    bad_light = {
+        **gen4_light_fixture,
+        "state": {**gen4_light_fixture["state"], "level": "not-a-number"},
+    }
+    state_data = gen4.build_state_data(
+        gen4_device_response, gen4_fan_fixture, [bad_light]
+    )
+    assert state_data[STATE_LIGHT_FIXTURES][0].brightness == 100
+
+
+def test_build_state_data_reverse_direction():
+    """Test that a True fanDirection (gen4 boolean) maps to the reverse string."""
+    reversed_fan = {
+        **gen4_fan_fixture,
+        "state": {**gen4_fan_fixture["state"], "fanDirection": True},
+    }
+    state_data = gen4.build_state_data(gen4_device_response, reversed_fan, [])
+    assert state_data[STATE_FAN_DIRECTION] == "reverse"
+
+
+def test_build_state_data_no_lights_uses_synthetic_default():
+    """Test that a fan with zero light fixtures gets a sensible default light."""
+    state_data = gen4.build_state_data(gen4_device_response, gen4_fan_fixture, [])
+    assert state_data[STATE_LIGHT_FIXTURES] == []
+    assert state_data[STATE_LIGHT_POWER] is False
+    assert state_data[STATE_LIGHT_BRIGHTNESS] == 100
+
+
+def test_build_info_data_maps_device_fields():
+    """Test that build_info_data maps /device fields into canonical INFO_* keys.
+
+    Without fan_fixture/light_fixtures (the pre-existing call shape), the
+    fields that depend on them fall back to empty — mac_address, light_type,
+    and fan_type all default to "".
+    """
+    info_data = gen4.build_info_data(gen4_device_response)
+    assert info_data[INFO_DEVICE_NAME] == "Fan"
+    assert info_data[INFO_FIRMWARE_VERSION] == "01.00.0082"
+    assert info_data[INFO_MAIN_MCU_FIRMWARE_VERSION] == "01.00.0012"
+    assert info_data[INFO_OWNER] == "someone@somewhere.com"
+    assert info_data[INFO_MAC] == "AA:BB:CC:DD:EE:FF"
+    assert info_data[INFO_LIGHT_TYPE] == ""
+    assert info_data[INFO_FAN_TYPE] == ""
+
+
+def test_build_info_data_maps_mac_light_type_and_fan_type():
+    """Test that build_info_data maps staMac, light presence, and fan model.
+
+    These three fields are what a Home Assistant-style consumer needs for
+    stable entity/device identity: INFO_MAC for the config entry's
+    unique_id and device registry identifiers, INFO_LIGHT_TYPE (non-empty)
+    for whether to set up a light entity at all, and INFO_FAN_TYPE for a
+    real "model" string in the device registry.
+    """
+    info_data = gen4.build_info_data(
+        gen4_device_response, gen4_fan_fixture, [gen4_light_fixture]
+    )
+    assert info_data[INFO_MAC] == "AA:BB:CC:DD:EE:FF"
+    assert info_data[INFO_LIGHT_TYPE] == "gen4"
+    assert info_data[INFO_FAN_TYPE] == "2603-56"
+
+    info_data_no_lights = gen4.build_info_data(
+        gen4_device_response, gen4_fan_fixture, []
+    )
+    assert info_data_no_lights[INFO_LIGHT_TYPE] == ""
+
+
+def test_build_fan_control_state_translates_all_fields():
+    """Test that a canonical fan commands dict becomes a gen4 fixture state."""
+    commands = {
+        aiomodernforms.COMMAND_FAN_POWER: True,
+        aiomodernforms.COMMAND_FAN_SPEED: 4,
+        aiomodernforms.COMMAND_FAN_DIRECTION: aiomodernforms.FAN_DIRECTION_REVERSE,
+        aiomodernforms.COMMAND_WIND: True,
+        aiomodernforms.COMMAND_WIND_SPEED: 2,
+        COMMAND_IDENTIFY: True,
+    }
+    state = gen4.build_fan_control_state(commands)
+    assert state == {
+        "status": True,
+        "fanSpeed": 4,
+        "fanDirection": True,
+        "wind": True,
+        "windSpeed": 2,
+        "findme": True,
+    }
+
+
+def test_build_fan_control_state_only_includes_given_fields():
+    """Test that fields not present in commands are omitted, not defaulted."""
+    state = gen4.build_fan_control_state({aiomodernforms.COMMAND_FAN_POWER: False})
+    assert state == {"status": False}
+
+
+def test_build_light_control_state_scales_brightness():
+    """Test that a canonical light commands dict becomes a gen4 fixture state."""
+    commands = {
+        aiomodernforms.COMMAND_LIGHT_POWER: True,
+        aiomodernforms.COMMAND_LIGHT_BRIGHTNESS: 75,
+        COMMAND_LIGHT_COLOR_TEMP: 3000,
+        COMMAND_IDENTIFY: False,
+    }
+    state = gen4.build_light_control_state(commands)
+    assert state == {
+        "status": True,
+        "level": 7500,
+        "mixColorTemp": 3000,
+        "findme": False,
+    }
+
+
+def test_parse_fan_control_response_translates_back():
+    """Test that an echoed gen4 fan state maps back to canonical STATE_* keys."""
+    result = gen4.parse_fan_control_response(
+        {"status": True, "fanSpeed": 4, "fanDirection": True, "wind": False}
+    )
+    assert result == {
+        STATE_FAN_POWER: True,
+        STATE_FAN_SPEED: 4,
+        STATE_FAN_DIRECTION: "reverse",
+        STATE_WIND_POWER: False,
+    }
+
+
+def test_parse_light_control_response_scales_brightness_back():
+    """Test that an echoed gen4 light state maps back to canonical STATE_* keys."""
+    result = gen4.parse_light_control_response(
+        {"status": True, "level": 2500, "mixColorTemp": 4000}
+    )
+    assert result == {
+        STATE_LIGHT_POWER: True,
+        STATE_LIGHT_BRIGHTNESS: 25,
+        STATE_LIGHT_COLOR_TEMP: 4000,
+    }
+
+
+@pytest.mark.asyncio
+async def test_reboot_gen4(aresponses):
+    """Test reboot() on Gen4 posts {"reboot": True} to /device."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with patch(
+            "aiomodernforms.ModernFormsDevice._request",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ):
+            await device.reboot()
+
+
+@pytest.mark.asyncio
+async def test_factory_reset_gen4_sends_hard_factory_reset(aresponses):
+    """Test that factory_reset() on Gen4 sends hardFactoryReset, not factoryReset."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with patch(
+            "aiomodernforms.ModernFormsDevice._request",
+            side_effect=ModernFormsConnectionTimeoutError,
+        ) as mock_request:
+            await device.factory_reset()
+            mock_request.assert_called_once_with(
+                {"hardFactoryReset": True}, path="device"
+            )
+
+
+@pytest.mark.asyncio
+async def test_gen4_unsupported_methods_raise(aresponses):
+    """Test that decommission/pairing/schedule raise on Gen4."""
+    _mock_gen4_device(aresponses)
+
+    async with aiomodernforms.ModernFormsDevice("fan.local") as device:
+        await device.update()
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.decommission()
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.enable_pairing_mode()
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.clear_paired_devices()
+        with pytest.raises(ModernFormsNotSupportedError):
+            await device.set_schedule("AAAA")

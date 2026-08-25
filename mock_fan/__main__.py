@@ -8,7 +8,7 @@ import logging
 from aiohttp import web
 
 from .generations import PROFILES
-from .server import create_app
+from .server import create_app, create_gen4_app
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -19,7 +19,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--generation",
         required=True,
-        choices=sorted(PROFILES),
+        choices=sorted([*PROFILES, "gen4"]),
         help="Fan hardware generation to emulate.",
     )
     parser.add_argument(
@@ -34,6 +34,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Enable light control (default: enabled). "
             "Use --no-light to simulate a fan-only unit."
+        ),
+    )
+    parser.add_argument(
+        "--lights",
+        type=int,
+        default=1,
+        help=(
+            "Number of light fixtures on the mock Gen4 fan (default: 1). "
+            "Only applies with --generation gen4."
         ),
     )
     parser.add_argument(
@@ -56,13 +65,20 @@ def main(argv: list[str] | None = None) -> None:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     args = _parse_args(argv)
-    profile = PROFILES[args.generation]
-    app = create_app(profile, breeze=args.breeze, light=args.light)
-    print(
-        f"Mock fan listening on {args.host}:{args.port}"
-        f" (generation={profile.name}, breeze={'on' if args.breeze else 'off'},"
-        f" light={'on' if args.light else 'off'})"
-    )
+    if args.generation == "gen4":
+        app = create_gen4_app(lights=args.lights)
+        print(
+            f"Mock fan listening on {args.host}:{args.port}"
+            f" (generation=gen4, lights={args.lights})"
+        )
+    else:
+        profile = PROFILES[args.generation]
+        app = create_app(profile, breeze=args.breeze, light=args.light)
+        print(
+            f"Mock fan listening on {args.host}:{args.port}"
+            f" (generation={profile.name}, breeze={'on' if args.breeze else 'off'},"
+            f" light={'on' if args.light else 'off'})"
+        )
     web.run_app(app, host=args.host, port=args.port, print=None)
 
 
