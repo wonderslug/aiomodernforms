@@ -63,6 +63,15 @@ SENSITIVE_KEYS = {
     const.GEN4_DEVICE_STA_MAC,  # WiFi station MAC; also this lib's INFO_MAC for Gen4
     const.GEN4_DEVICE_AP_MAC,
     const.GEN4_DEVICE_BLE_MAC,
+    # nwkState.bssid/ssid identify a specific WiFi router/network, both
+    # geolocatable via public WiFi-mapping databases (e.g. WiGLE).
+    const.GEN4_NWK_BSSID,
+    const.GEN4_NWK_SSID,
+    # /device also reports the fan's own GPS-derived location directly.
+    const.GEN4_DEVICE_LATITUDE,
+    const.GEN4_DEVICE_LONGITUDE,
+    const.GEN4_DEVICE_LOCATION_ID,
+    const.GEN4_DEVICE_TIMEZONE,
 }
 
 # Every key this library currently parses out of each endpoint's response.
