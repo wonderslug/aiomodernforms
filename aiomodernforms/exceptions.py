@@ -5,19 +5,19 @@ class ModernFormsError(Exception):
     """Generic Modern Forms exception."""
 
 
-class ModernFormsInvalidSettingsError(Exception):
+class ModernFormsInvalidSettingsError(ModernFormsError):
     """Modern Forms Not InvalidSettings exception."""
 
 
-class ModernFormsNotSupportedError(Exception):
+class ModernFormsNotSupportedError(ModernFormsError):
     """Raised when a feature isn't supported on a device's generation."""
 
 
-class ModernFormsNotInitializedError(Exception):
+class ModernFormsNotInitializedError(ModernFormsError):
     """Modern Forms Not InvalidSettings exception."""
 
 
-class ModernFormsEmptyResponseError(Exception):
+class ModernFormsEmptyResponseError(ModernFormsError):
     """Modern Forms empty API response exception."""
 
 

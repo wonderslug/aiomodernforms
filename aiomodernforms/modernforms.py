@@ -146,6 +146,12 @@ class ModernFormsDevice:
         # if that fails.
         try:
             result = await self._update_legacy(full_update=full_update)
+        except ModernFormsEmptyResponseError:
+            # An empty response is a real legacy device misbehaving, not a
+            # sign that this isn't a legacy device — let it propagate (and
+            # retry via update()'s own backoff) rather than falling through
+            # to the Gen4 probe below.
+            raise
         except ModernFormsError:
             device_data = await self._probe_gen4()
             if device_data is not None:
