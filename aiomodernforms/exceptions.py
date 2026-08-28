@@ -6,7 +6,7 @@ class ModernFormsError(Exception):
 
 
 class ModernFormsInvalidSettingsError(ModernFormsError):
-    """Modern Forms Not InvalidSettings exception."""
+    """Modern Forms invalid settings exception."""
 
 
 class ModernFormsNotSupportedError(ModernFormsError):
@@ -14,7 +14,7 @@ class ModernFormsNotSupportedError(ModernFormsError):
 
 
 class ModernFormsNotInitializedError(ModernFormsError):
-    """Modern Forms Not InvalidSettings exception."""
+    """Modern Forms not initialized exception."""
 
 
 class ModernFormsEmptyResponseError(ModernFormsError):
