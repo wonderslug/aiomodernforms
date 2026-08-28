@@ -5,25 +5,25 @@ class ModernFormsError(Exception):
     """Generic Modern Forms exception."""
 
 
-class ModernFormsInvalidSettingsError(Exception):
-    """Modern Forms Not InvalidSettings exception."""
+class ModernFormsInvalidSettingsError(ModernFormsError):
+    """Raised when invalid settings are provided."""
 
 
-class ModernFormsNotSupportedError(Exception):
+class ModernFormsNotSupportedError(ModernFormsError):
     """Raised when a feature isn't supported on a device's generation."""
 
 
-class ModernFormsNotInitializedError(Exception):
-    """Modern Forms Not InvalidSettings exception."""
+class ModernFormsNotInitializedError(ModernFormsError):
+    """Raised when the device hasn't been initialized via update()."""
 
 
-class ModernFormsEmptyResponseError(Exception):
-    """Modern Forms empty API response exception."""
+class ModernFormsEmptyResponseError(ModernFormsError):
+    """Raised when the device returns an empty API response."""
 
 
 class ModernFormsConnectionError(ModernFormsError):
-    """Modern Forms connection exception."""
+    """Raised when communication with the device fails."""
 
 
 class ModernFormsConnectionTimeoutError(ModernFormsConnectionError):
-    """Modern Forms connection Timeout exception."""
+    """Raised when connecting to the device times out."""

@@ -47,6 +47,8 @@ from aiomodernforms.const import (
 from aiomodernforms.exceptions import (
     ModernFormsConnectionTimeoutError,
     ModernFormsEmptyResponseError,
+    ModernFormsError,
+    ModernFormsInvalidSettingsError,
     ModernFormsNotInitializedError,
     ModernFormsNotSupportedError,
 )
@@ -57,6 +59,28 @@ def test_not_supported_error_is_an_exception():
     """Test that ModernFormsNotSupportedError exists and is a real exception."""
     with pytest.raises(ModernFormsNotSupportedError):
         raise ModernFormsNotSupportedError("not supported on this generation")
+
+
+@pytest.mark.parametrize(
+    "exception_class",
+    [
+        ModernFormsNotSupportedError,
+        ModernFormsInvalidSettingsError,
+        ModernFormsNotInitializedError,
+        ModernFormsEmptyResponseError,
+    ],
+)
+def test_library_exceptions_are_modern_forms_errors(exception_class):
+    """Test that library-specific exceptions are also ModernFormsError instances.
+
+    Consuming code (e.g. Home Assistant's exception handler) catches
+    ModernFormsError to translate library errors into a friendly message, so
+    every exception raised by this library must be catchable that way too.
+    """
+    assert issubclass(exception_class, ModernFormsError)
+
+    with pytest.raises(ModernFormsError):
+        raise exception_class("boom")
 
 
 basic_response = {
